@@ -1,0 +1,9 @@
+fastapi
+uvicorn
+pyside6
+sqlalchemy
+google-cloud-firestore
+requests
+python-escpos
+pyserial
+pyinstaller

@@ -1,0 +1,24 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // 驗證請求者是否為授權的員工或本機 Python 用戶端節點
+    function isTenantStaff(tenantId) {
+      return request.auth != null && request.auth.token.tenant_doc_id == tenantId;
+    }
+
+    match /tenants/{tenantId}/{document=**} {
+      // 菜單與桌位配置開放給掃碼客戶讀取
+      allow read: if true;
+
+      // 僅經過驗證的本機後端或租戶管理員可以寫入配置或修改菜單
+      allow write: if isTenantStaff(tenantId);
+    }
+
+    match /tenants/{tenantId}/orders/{orderId} {
+      // 匿名客戶可以自由創建自己的訂單
+      allow create: if true;
+      // 僅租戶人員 / 本機後端守護進程可以查詢或更改訂單生命週期（例如：已接受、已完成）
+      allow read, update: if isTenantStaff(tenantId);
+    }
+  }
+}
