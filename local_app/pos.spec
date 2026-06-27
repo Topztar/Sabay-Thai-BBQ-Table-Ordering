@@ -3,15 +3,17 @@
 block_cipher = None
 
 a = Analysis(
-    ['src/gui.py'],
+    ['src/main.py'],
     pathex=[],
     binaries=[],
     datas=[
         ('src/models.py', '.'),
         ('src/database.py', '.'),
         ('src/hardware.py', '.'),
+        ('src/sync_engine.py', '.'),
+        ('src/gui.py', '.'),
     ],
-    hiddenimports=['sqlalchemy.ext.declarative', 'google.cloud.firestore', 'escpos'],
+    hiddenimports=['sqlalchemy.ext.declarative', 'google.cloud.firestore', 'escpos', 'serial'],
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
