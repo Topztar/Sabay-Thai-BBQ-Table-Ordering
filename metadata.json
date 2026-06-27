@@ -1,6 +1,6 @@
 {
-  "name": "",
-  "description": "",
+  "name": "Sabay Thai BBQ Table Ordering System",
+  "description": "A high-resilience, offline-first multi-tenant hybrid cloud-local table ordering system for Sabay Thai BBQ.",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }
