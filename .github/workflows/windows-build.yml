@@ -1,0 +1,28 @@
+name: Windows Executable Build
+
+on:
+  push:
+    branches: [ main ]
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+    - uses: actions/checkout@v3
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r local_app/requirements.txt
+    - name: Build with PyInstaller
+      run: |
+        cd local_app
+        pyinstaller pos.spec
+    - name: Upload Artifact
+      uses: actions/upload-artifact@v3
+      with:
+        name: SabayThaiPOS-Exe
+        path: local_app/dist/SabayThaiPOS.exe
