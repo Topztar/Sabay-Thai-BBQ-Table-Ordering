@@ -1,24 +1,58 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { BrowserRouter as Router, useLocation } from 'react-router-dom';
 import { collection, addDoc, onSnapshot } from 'firebase/firestore';
-import { db } from './firebase';
+import { onAuthStateChanged } from 'firebase/auth';
+import { db, auth } from './firebase';
 
 function OrderSystem() {
   const query = new URLSearchParams(useLocation().search);
   const tenantId = query.get('tenantId') || 'DEFAULT';
   const tableId = query.get('tableId') || 'Counter';
 
-  const [menu, setMenu] = useState([]);
+  // 實作持久化守衛：優先從 localStorage 載入快取數據
+  const [menu, setMenu] = useState(() => {
+    const savedMenu = localStorage.getItem(`menu_${tenantId}`);
+    return savedMenu ? JSON.parse(savedMenu) : [];
+  });
   const [cart, setCart] = useState([]);
+  const [isInitializing, setIsInitializing] = useState(true);
+
+  // 使用 useRef 追蹤是否為首次掛載
+  const hasLoadedFromCloud = useRef(false);
 
   useEffect(() => {
     if (!tenantId) return;
-    // 實作 Phase 1 的路徑隔離監聽
-    const unsubscribe = onSnapshot(collection(db, 'tenants', tenantId, 'menus'), (snapshot) => {
-      const items = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-      setMenu(items);
+
+    // 嚴謹的啟動序列：1. 驗證 Auth 2. 啟動 Firestore 監聽
+    const unsubscribeAuth = onAuthStateChanged(auth, (user) => {
+      console.log("Auth State Changed:", user ? "Authenticated" : "Unauthenticated");
+
+      const unsubscribeFirestore = onSnapshot(
+        collection(db, 'tenants', tenantId, 'menus'),
+        (snapshot) => {
+          if (!snapshot.empty) {
+            const items = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+
+            // 更新狀態並持久化到本地
+            setMenu(items);
+            localStorage.setItem(`menu_${tenantId}`, JSON.stringify(items));
+            hasLoadedFromCloud.current = true;
+          } else {
+            // 關鍵修復：若 Cloud 回傳空且已有快取，則不執行重設，防止回滾
+            console.warn("Cloud menu is empty. Keeping local cache to prevent rollback.");
+          }
+          setIsInitializing(false);
+        },
+        (error) => {
+          console.error("Firestore error:", error);
+          setIsInitializing(false);
+        }
+      );
+
+      return () => unsubscribeFirestore();
     });
-    return () => unsubscribe();
+
+    return () => unsubscribeAuth();
   }, [tenantId]);
 
   const placeOrder = async () => {
@@ -39,6 +73,14 @@ function OrderSystem() {
     }
   };
 
+  if (isInitializing && menu.length === 0) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-100">
+        <div className="text-xl font-semibold text-gray-600 animate-pulse">正在初始化系統安全環境...</div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-gray-100 p-4">
       <header className="bg-red-600 text-white p-4 rounded-lg shadow-lg mb-6">
@@ -47,7 +89,12 @@ function OrderSystem() {
 
       <main className="grid grid-cols-1 md:grid-cols-2 gap-6">
         <section className="bg-white p-4 rounded-lg shadow">
-          <h2 className="text-xl font-semibold mb-4">精選菜單</h2>
+          <div className="flex justify-between items-center mb-4">
+            <h2 className="text-xl font-semibold">精選菜單</h2>
+            {!hasLoadedFromCloud.current && menu.length > 0 && (
+              <span className="text-xs bg-yellow-100 text-yellow-800 px-2 py-1 rounded">離線快取模式</span>
+            )}
+          </div>
           <div className="space-y-4">
             {menu.map(item => (
               <div key={item.id} className="flex justify-between items-center border-b pb-2">
