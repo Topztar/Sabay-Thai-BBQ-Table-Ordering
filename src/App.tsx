@@ -73,13 +73,13 @@ function PinGate({ onSuccess }: { onSuccess: () => void }) {
     if (isDisabled) return;
     setError('');
     
-    if (pin.length < 6) {
+    if (pin.length < 4) {
       const newPin = pin + num;
       setPin(newPin);
       
-      if (newPin.length === 6) {
+      if (newPin.length === 4) {
         setIsVerifying(true);
-        const success = await loginSession(role, selectedBranchId, newPin);
+        const success = await loginSession(role, selectedBranchId, newPin, adminUsername);
         
         if (success) {
           setTimeout(() => {
@@ -100,7 +100,7 @@ function PinGate({ onSuccess }: { onSuccess: () => void }) {
             } else {
               setError(`密碼錯誤，請重新輸入 (剩餘嘗試次數: ${3 - nextFailed})`);
             }
-          }, 400); // Allow brief visual delay of filled dots before clearing
+          }, 400);
         }
       }
     }
@@ -158,12 +158,12 @@ function PinGate({ onSuccess }: { onSuccess: () => void }) {
   };
 
   return (
-    <div className="min-h-screen bg-slate-950 flex flex-col justify-center items-center px-4 py-12 relative overflow-hidden font-sans antialiased">
+    <div className={`min-h-screen ${role === 'SUPER_ADMIN' ? 'bg-slate-950' : 'bg-emerald-950/20'} flex flex-col justify-center items-center px-4 py-12 relative overflow-hidden font-sans antialiased transition-colors duration-700`}>
       {/* Decorative background glows */}
-      <div className="absolute top-1/4 left-1/2 -translate-x-1/2 -translate-y-1/2 w-80 h-80 bg-indigo-600/10 rounded-full blur-3xl pointer-events-none" />
-      <div className="absolute bottom-1/4 left-1/2 -translate-x-1/2 translate-y-1/2 w-80 h-80 bg-purple-600/10 rounded-full blur-3xl pointer-events-none" />
+      <div className={`absolute top-1/4 left-1/2 -translate-x-1/2 -translate-y-1/2 w-80 h-80 ${role === 'SUPER_ADMIN' ? 'bg-indigo-600/10' : 'bg-emerald-600/10'} rounded-full blur-3xl pointer-events-none transition-colors duration-700`} />
+      <div className={`absolute bottom-1/4 left-1/2 -translate-x-1/2 translate-y-1/2 w-80 h-80 ${role === 'SUPER_ADMIN' ? 'bg-purple-600/10' : 'bg-teal-600/10'} rounded-full blur-3xl pointer-events-none transition-colors duration-700`} />
 
-      <div className="w-full max-w-md bg-slate-900/85 backdrop-blur-xl border border-slate-800/80 rounded-3xl p-8 shadow-2xl relative z-10 flex flex-col items-center">
+      <div className={`w-full max-w-md ${role === 'SUPER_ADMIN' ? 'bg-slate-900/85 border-slate-800/80' : 'bg-emerald-900/10 border-emerald-800/30'} backdrop-blur-xl border rounded-3xl p-8 shadow-2xl relative z-10 flex flex-col items-center transition-all duration-700`}>
         {/* Header Section */}
         <div className="flex flex-col items-center text-center mb-6">
           {lockoutTime > 0 ? (
@@ -197,25 +197,23 @@ function PinGate({ onSuccess }: { onSuccess: () => void }) {
               </div>
             </div>
           ) : (
-            <div className="bg-gradient-to-tr from-indigo-600 to-purple-600 p-3.5 rounded-2xl text-white shadow-xl shadow-indigo-500/10 mb-4 animate-pulse">
-              <Lock className="h-6 w-6" />
+            <div className={`${role === 'SUPER_ADMIN' ? 'bg-gradient-to-tr from-indigo-600 to-purple-600 shadow-indigo-500/10' : 'bg-gradient-to-tr from-emerald-600 to-teal-600 shadow-emerald-500/10'} p-3.5 rounded-2xl text-white shadow-xl mb-4 animate-pulse transition-all duration-700`}>
+              {role === 'SUPER_ADMIN' ? <Shield className="h-7 w-7" /> : <Users className="h-7 w-7" />}
             </div>
           )}
-          <h2 className="text-lg font-black tracking-wider text-white">安全身分驗證</h2>
-          <p className="text-slate-400 text-[11px] mt-1.5 font-bold">
-            {lockoutTime > 0 
-              ? '系統鎖定中，請稍候' 
-              : role === 'SUPER_ADMIN' 
-                ? '高級管理員登入請輸入帳號與密碼' 
-                : '使用者登入請選取駐點分店並輸入 6 位數安全 PIN 碼'}
+          <h2 className="text-xl font-black text-white tracking-tight mb-1">
+            {role === 'SUPER_ADMIN' ? '高級管理員登入' : '使用者登入'}
+          </h2>
+          <p className="text-[10px] text-slate-500 font-bold uppercase tracking-[0.2em]">
+            {role === 'SUPER_ADMIN' ? 'Advanced Admin Authentication' : 'Staff Access Portal'}
           </p>
         </div>
 
-        {/* Role Select Options */}
-        <div className="flex gap-3.5 w-full mb-5">
+        {/* Tab Switcher */}
+        <div className="flex w-full gap-2 p-1 bg-slate-950/50 rounded-2xl border border-slate-800/50 mb-8">
           <button
             type="button"
-            onClick={() => { setRole('SUPER_ADMIN'); setPin(''); setError(''); setAdminUsername(''); setAdminPassword(''); }}
+            onClick={() => { setRole('SUPER_ADMIN'); setPin(''); setError(''); }}
             disabled={isDisabled}
             className={`flex-1 py-3.5 rounded-2xl border text-[11px] font-black transition-all flex flex-col items-center gap-1.5 cursor-pointer ${
               role === 'SUPER_ADMIN'
@@ -228,22 +226,21 @@ function PinGate({ onSuccess }: { onSuccess: () => void }) {
           </button>
           <button
             type="button"
-            onClick={() => { setRole('BRANCH_STAFF'); setPin(''); setError(''); }}
+            onClick={() => { setRole('BRANCH_STAFF'); setPin(''); setAdminUsername(''); setError(''); }}
             disabled={isDisabled}
             className={`flex-1 py-3.5 rounded-2xl border text-[11px] font-black transition-all flex flex-col items-center gap-1.5 cursor-pointer ${
               role === 'BRANCH_STAFF'
-                ? 'bg-purple-600/20 border-purple-500/50 text-purple-300 shadow-inner'
+                ? 'bg-emerald-600/20 border-emerald-500/50 text-emerald-300 shadow-inner'
                 : 'bg-slate-950/40 border-slate-850 text-slate-500 hover:text-slate-300 hover:border-slate-800'
             }`}
           >
-            <Building className="h-4.5 w-4.5" />
+            <Users className="h-4.5 w-4.5" />
             <span>使用者登入</span>
           </button>
         </div>
 
-        {/* Dynamic Forms / Input areas based on role selection */}
+        {/* Dynamic Forms */}
         {role === 'SUPER_ADMIN' ? (
-          /* SUPER ADMIN: Account & Password input layout */
           <form onSubmit={handleAdminSubmit} className="w-full space-y-4 mb-5">
             <div>
               <label className="block text-[10px] text-slate-500 font-black mb-1.5 uppercase tracking-wider">高級管理員帳號 (Account)</label>
@@ -269,7 +266,6 @@ function PinGate({ onSuccess }: { onSuccess: () => void }) {
               />
             </div>
 
-            {/* Error Notification / Cooldown info */}
             <div className="h-8 flex items-center justify-center text-center">
               {lockoutTime > 0 ? (
                 <div className="flex items-center gap-2 text-[11px] text-amber-400 font-extrabold bg-amber-500/10 border border-amber-500/20 px-4 py-1 rounded-full">
@@ -284,7 +280,7 @@ function PinGate({ onSuccess }: { onSuccess: () => void }) {
               ) : (
                 <div className="flex items-center gap-1 text-[10px] text-slate-500 font-mono">
                   <KeyRound className="h-3 w-3" />
-                  <span>請輸入帳號 topztar 及密碼</span>
+                  <span>請輸入管理員帳密進行授權</span>
                 </div>
               )}
             </div>
@@ -310,16 +306,14 @@ function PinGate({ onSuccess }: { onSuccess: () => void }) {
             </button>
           </form>
         ) : (
-          /* BRANCH STAFF: Branch Dropdown & 6-dot bullet indicators with numeric tactile keypad layout */
-          <>
-            {/* Branch Select Dropdown */}
-            <div className="w-full mb-5 animate-fade-in">
+          <div className="w-full flex flex-col items-center">
+            <div className="w-full mb-4">
               <label className="block text-[10px] text-slate-500 font-black mb-1.5 uppercase tracking-wider">選擇駐點店別 (Branch Target)</label>
               <select
                 value={selectedBranchId}
                 onChange={(e) => { setSelectedBranchId(e.target.value); setPin(''); setError(''); }}
                 disabled={isDisabled}
-                className="w-full bg-slate-950 border border-slate-800 text-xs font-black text-white rounded-xl py-2.5 px-3 focus:outline-none focus:border-indigo-500"
+                className="w-full bg-slate-950 border border-slate-800 text-xs font-black text-white rounded-xl py-2.5 px-3 focus:outline-none focus:border-emerald-500"
               >
                 {tenants.map(t => (
                   <option key={t.id} value={t.id}>{t.name}</option>
@@ -327,28 +321,38 @@ function PinGate({ onSuccess }: { onSuccess: () => void }) {
               </select>
             </div>
 
-            {/* Bullet Pin Indicators */}
+            <div className="w-full mb-5">
+              <label className="block text-[10px] text-slate-500 font-black mb-1.5 uppercase tracking-wider">使用者帳號 (Account)</label>
+              <input
+                type="text"
+                value={adminUsername}
+                onChange={(e) => { setError(''); setAdminUsername(e.target.value); }}
+                disabled={isDisabled}
+                placeholder="預設為 sabay"
+                className="w-full bg-slate-950 border border-slate-850 text-xs text-white font-medium rounded-xl py-3 px-4 focus:outline-none focus:border-emerald-500/80 transition-all placeholder-slate-700"
+              />
+            </div>
+
             <div className="flex justify-center gap-3.5 mb-5">
-              {[...Array(6)].map((_, i) => (
+              {[...Array(4)].map((_, i) => (
                 <div
                   key={i}
                   className={`w-3.5 h-3.5 rounded-full transition-all duration-300 border ${
                     lockoutTime > 0
                       ? 'bg-slate-800 border-slate-700/60'
                       : i < pin.length
-                        ? 'bg-indigo-500 border-indigo-400 shadow-lg shadow-indigo-500/50 scale-110'
+                        ? 'bg-emerald-500 border-emerald-400 shadow-lg shadow-emerald-500/50 scale-110'
                         : 'bg-slate-950 border-slate-800'
                   }`}
                 />
               ))}
             </div>
 
-            {/* Error Notification / Cooldown info */}
             <div className="h-8 mb-4 flex items-center justify-center text-center">
               {lockoutTime > 0 ? (
                 <div className="flex items-center gap-2 text-[11px] text-amber-400 font-extrabold bg-amber-500/10 border border-amber-500/20 px-4 py-1 rounded-full">
                   <span className="animate-spin h-3 w-3 border-2 border-amber-400 border-t-transparent rounded-full" />
-                  <span>鎖定中！請等待 {lockoutTime} 秒後再試</span>
+                  <span>鎖定中！請等待 {lockoutTime} 秒</span>
                 </div>
               ) : error ? (
                 <div className="flex items-center gap-1.5 text-[11px] text-red-400 font-extrabold bg-red-500/10 border border-red-500/20 px-3.5 py-1 rounded-full">
@@ -358,14 +362,11 @@ function PinGate({ onSuccess }: { onSuccess: () => void }) {
               ) : (
                 <div className="flex items-center gap-1 text-[10px] text-slate-500 font-mono">
                   <KeyRound className="h-3 w-3" />
-                  <span>
-                    店員預設：{selectedBranchId === 'DEFAULT' ? '111111' : selectedBranchId === 'EAST_BRANCH' ? '222222' : '333333'}
-                  </span>
+                  <span>請輸入帳號與 4 位數 PIN 碼</span>
                 </div>
               )}
             </div>
 
-            {/* tactile numpad grid */}
             <div className="grid grid-cols-3 gap-3 w-full max-w-xs mb-6">
               {['1', '2', '3', '4', '5', '6', '7', '8', '9'].map((num) => (
                 <button
@@ -375,7 +376,7 @@ function PinGate({ onSuccess }: { onSuccess: () => void }) {
                   className={`h-14 rounded-2xl bg-slate-950/40 border border-slate-850 text-white font-black text-lg transition-all flex items-center justify-center select-none ${
                     isDisabled
                       ? 'opacity-25 cursor-not-allowed bg-slate-950/10'
-                      : 'hover:bg-slate-800/80 active:bg-slate-700/80 cursor-pointer'
+                      : 'hover:bg-emerald-900/40 active:bg-emerald-800/60 cursor-pointer'
                   }`}
                 >
                   {num}
@@ -396,7 +397,7 @@ function PinGate({ onSuccess }: { onSuccess: () => void }) {
                 className={`h-14 rounded-2xl bg-slate-950/40 border border-slate-850 text-white font-black text-lg transition-all flex items-center justify-center select-none ${
                   isDisabled
                     ? 'opacity-25 cursor-not-allowed bg-slate-950/10'
-                    : 'hover:bg-slate-800/80 active:bg-slate-700/80 cursor-pointer'
+                    : 'hover:bg-emerald-900/40 active:bg-emerald-800/60 cursor-pointer'
                 }`}
               >
                 0
@@ -411,7 +412,7 @@ function PinGate({ onSuccess }: { onSuccess: () => void }) {
                 <Delete className="h-5 w-5" />
               </button>
             </div>
-          </>
+          </div>
         )}
 
         {/* Back Link */}
@@ -496,14 +497,14 @@ function AdminSystem() {
   }
 
   return (
-    <div className="min-h-screen flex flex-col bg-slate-900 font-sans antialiased text-slate-100">
+    <div className={`min-h-screen flex flex-col ${session.role === "SUPER_ADMIN" ? "bg-slate-900" : "bg-emerald-950/10"} font-sans antialiased text-slate-100 transition-colors duration-700`}>
       {/* Synchronization HUD */}
       <OfflineQueueHUD />
 
       {/* Backend Premium Header */}
-      <header className="bg-slate-950 border-b border-slate-800 px-6 py-4 flex flex-col md:flex-row items-center justify-between gap-4 shadow-xl">
+      <header className={`${session.role === "SUPER_ADMIN" ? "bg-slate-950 border-slate-800" : "bg-emerald-950 border-emerald-900/30"} border-b px-6 py-4 flex flex-col md:flex-row items-center justify-between gap-4 shadow-xl transition-colors duration-700`}>
         <div className="flex items-center gap-3">
-          <div className={`bg-red-600 p-2 rounded-xl text-white shadow-lg shadow-red-600/30 transition-all duration-1000 ${
+          <div className={`${session.role === "SUPER_ADMIN" ? "bg-red-600 shadow-red-600/30" : "bg-emerald-600 shadow-emerald-600/30"} p-2 rounded-xl text-white transition-all duration-1000 ${
             isIdle
               ? 'animate-[pulse_3s_ease-in-out_infinite] scale-95 opacity-70'
               : 'animate-[pulse_1s_ease-in-out_infinite] scale-100 opacity-100'
@@ -682,7 +683,7 @@ function AdminSystem() {
       </header>
 
       {/* Main Content Area */}
-      <main className="flex-grow flex flex-col pb-28 bg-slate-950/20">
+      <main className={`flex-grow flex flex-col ${session.role === "SUPER_ADMIN" ? "pb-28 bg-slate-950/20" : "pb-6 bg-emerald-950/5"} transition-all`}>
         {currentView === 'kds' && <KitchenDisplaySystem />}
         {currentView === 'manager' && session.role === 'SUPER_ADMIN' && <ManagerDashboard />}
         {currentView === 'tenant-admin' && session.role === 'SUPER_ADMIN' && <TenantManagementView />}
