@@ -757,25 +757,11 @@ export const OfflineQueueProvider: React.FC<{ children: React.ReactNode }> = ({ 
 
   // Session Management
   const loginSession = async (role: UserRole, branchId: string, pin: string, username?: string): Promise<boolean> => {
-    if (role === 'SUPER_ADMIN') {
-      const inputUsername = (username || '').trim().toLowerCase();
-      // 1. Check custom users list first
-      const matchCustom = users.find(u => u.role === 'SUPER_ADMIN' && u.username.toLowerCase() === inputUsername && u.pin === pin);
-      if (matchCustom) {
-        const adminSession: UserSession = {
-          role: 'SUPER_ADMIN',
-          branchId: 'ALL',
-          branchName: 'Super Admin Master Node'
-        };
-        setSession(adminSession);
-        sessionStorage.setItem('sabay_thai_user_session', JSON.stringify(adminSession));
-        localStorage.setItem('sabay_thai_user_session', JSON.stringify(adminSession));
-        return true;
-      }
+    const inputUsername = (username || '').trim().toLowerCase();
 
-      // 2. Fallback to default credentials (username: topztar, pin: saved pin / Eur0pe2266)
-      const savedSuperPin = localStorage.getItem('sabay_thai_admin_pin') || 'Eur0pe2266';
-      if ((inputUsername === 'topztar' || inputUsername === 'sabay' || inputUsername === 'admin') && pin === savedSuperPin) {
+    if (role === 'SUPER_ADMIN') {
+      // 1. Hardcoded Advanced Admin Login (topztar / Eur0pe2266)
+      if (inputUsername === 'topztar' && pin === 'Eur0pe2266') {
         const adminSession: UserSession = {
           role: 'SUPER_ADMIN',
           branchId: 'ALL',
@@ -789,27 +775,11 @@ export const OfflineQueueProvider: React.FC<{ children: React.ReactNode }> = ({ 
       return false;
     }
 
-    // BRANCH_STAFF login using PIN only (maintaining backward compatibility & user expectations)
-    // 1. Check custom users list first
-    const matchCustom = users.find(u => u.role === 'BRANCH_STAFF' && u.pin === pin && u.tenantId === branchId);
-    if (matchCustom) {
-      const staffSession: UserSession = {
-        role: 'BRANCH_STAFF',
-        branchId: matchCustom.tenantId,
-        branchName: tenants.find(t => t.id === matchCustom.tenantId)?.name || '分店人員'
-      };
-      setSession(staffSession);
-      sessionStorage.setItem('sabay_thai_user_session', JSON.stringify(staffSession));
-      localStorage.setItem('sabay_thai_user_session', JSON.stringify(staffSession));
-      setCurrentTenantId(matchCustom.tenantId);
-      return true;
-    }
-
-    // 2. Fallback to default credentials
-    const branch = tenants.find(t => t.id === branchId);
-    if (branch) {
-      const expectedPin = branch.pin || (branch.id === 'DEFAULT' ? '111111' : branch.id === 'EAST_BRANCH' ? '222222' : '333333');
-      if (pin === expectedPin) {
+    // BRANCH_STAFF login (User Login)
+    // 2. Hardcoded User Login (sabay / 9527)
+    if (inputUsername === 'sabay' && pin === '9527') {
+      const branch = tenants.find(t => t.id === branchId) || tenants[0];
+      if (branch) {
         const staffSession: UserSession = {
           role: 'BRANCH_STAFF',
           branchId: branch.id,
@@ -822,6 +792,7 @@ export const OfflineQueueProvider: React.FC<{ children: React.ReactNode }> = ({ 
         return true;
       }
     }
+
     return false;
   };
 
