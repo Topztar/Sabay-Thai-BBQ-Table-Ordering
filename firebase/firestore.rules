@@ -20,5 +20,12 @@ service cloud.firestore {
       // 僅租戶人員 / 本機後端守護進程可以查詢或更改訂單生命週期（例如：已接受、已完成）
       allow read, update: if isTenantStaff(tenantId);
     }
+
+    match /menu_items/{itemId} {
+      // 全域菜單開放讀取供各分店前台下載展示
+      allow read: if true;
+      // 僅經過身分驗證的管理人員可修改全域菜單
+      allow write: if request.auth != null;
+    }
   }
 }

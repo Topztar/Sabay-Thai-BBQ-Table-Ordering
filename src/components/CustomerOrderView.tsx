@@ -1,7 +1,9 @@
 import React, { useState, useEffect } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
+import { motion, AnimatePresence } from 'motion/react';
 import { useOfflineQueue } from './OfflineQueueContext';
 import { MenuItem, CartItem, Order, LanguageResources } from '../types';
-import { ShoppingCart, Languages, Clock, ShoppingBag, Info, CheckCircle2, Flame, AlertTriangle } from 'lucide-react';
+import { ShoppingCart, Languages, Clock, ShoppingBag, Info, CheckCircle2, Flame, AlertTriangle, Shield, X, Lock } from 'lucide-react';
 
 const TRANSLATIONS: Record<'zh' | 'en', LanguageResources> = {
   zh: {
@@ -69,6 +71,9 @@ export const CustomerOrderView: React.FC = () => {
     currentTenantId
   } = useOfflineQueue();
 
+  const navigate = useNavigate();
+  const [showStaffConfirm, setShowStaffConfirm] = useState<boolean>(false);
+
   // Extract tenantId and tableId from URL search params
   const [tenantId, setTenantId] = useState<string>('DEFAULT');
   const [tableId, setTableId] = useState<string>('Counter-1');
@@ -109,6 +114,7 @@ export const CustomerOrderView: React.FC = () => {
   const [cart, setCart] = useState<CartItem[]>([]);
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [selectedCategory, setSelectedCategory] = useState<string>('All');
+  const [isCartOpen, setIsCartOpen] = useState<boolean>(false);
 
   // Modal / Selected Item for Modifiers
   const [selectedMenuItem, setSelectedMenuItem] = useState<MenuItem | null>(null);
@@ -157,8 +163,12 @@ export const CustomerOrderView: React.FC = () => {
   const cartTotal = cart.reduce((sum, item) => sum + (item.menuItem.price * item.quantity), 0);
   const isBelowMinSpend = cartTotal > 0 && cartTotal < minSpendLimit;
 
-  // Filter menu items
+  // Filter menu items based on branch assignment and search/category criteria
   const filteredMenu = menu.filter(item => {
+    // Only display if item is assigned to current tenantId (branch)
+    const isAssigned = !item.assignedBranches || item.assignedBranches.includes(tenantId);
+    if (!isAssigned) return false;
+
     const matchesSearch =
       item.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       item.nameEn.toLowerCase().includes(searchQuery.toLowerCase());
@@ -296,15 +306,26 @@ export const CustomerOrderView: React.FC = () => {
               <Languages className="h-4 w-4" />
               <span>{lang === 'zh' ? 'English' : '繁體中文'}</span>
             </button>
+            <Link
+              to={`/FSY20260606?tenantId=${tenantId}`}
+              onClick={(e) => {
+                e.preventDefault();
+                setShowStaffConfirm(true);
+              }}
+              className="flex items-center gap-1.5 bg-yellow-500 hover:bg-yellow-400 text-slate-900 px-4 py-2 rounded-lg text-xs font-black transition-all shadow-md shadow-yellow-500/10 cursor-pointer animate-pulse"
+            >
+              <Shield className="h-3.5 w-3.5" />
+              <span>員工專區 Staff</span>
+            </Link>
           </div>
         </div>
       </section>
 
-      {/* Main Grid */}
-      <div className="max-w-7xl mx-auto px-4 py-6 grid grid-cols-1 lg:grid-cols-12 gap-6">
+      {/* Main Grid - Now Full Width */}
+      <div className="max-w-7xl mx-auto px-4 py-6">
         
         {/* Left Side: Category bar, Search, and Catalog Items */}
-        <section className="lg:col-span-8 space-y-6">
+        <section className="w-full space-y-6">
           <div className="bg-white rounded-2xl p-4 shadow-sm border border-slate-100 flex flex-col sm:flex-row gap-3 justify-between items-center">
             {/* Category Selector */}
             <div className="flex flex-wrap gap-1.5 self-start sm:self-center">
@@ -344,7 +365,7 @@ export const CustomerOrderView: React.FC = () => {
           </div>
 
           {/* Menu Catalog */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {filteredMenu.map(item => (
               <div
                 key={item.id}
@@ -419,100 +440,151 @@ export const CustomerOrderView: React.FC = () => {
             </div>
           )}
         </section>
+      </div>
 
-        {/* Right Side: Interactive Cart Drawer */}
-        <section className="lg:col-span-4 bg-white rounded-2xl p-5 border border-slate-100 shadow-sm flex flex-col h-fit">
-          <div className="flex items-center gap-2 border-b border-slate-100 pb-4 mb-4">
-            <ShoppingCart className="h-5 w-5 text-red-600" />
-            <h2 className="text-lg font-black text-slate-800">{t.cart}</h2>
-          </div>
+      {/* Floating Cart Trigger Button */}
+      <button
+        onClick={() => setIsCartOpen(true)}
+        className="fixed bottom-28 right-6 z-40 bg-red-600 hover:bg-red-700 text-white p-4 rounded-full shadow-2xl transition-all duration-300 hover:scale-110 active:scale-95 cursor-pointer flex items-center justify-center gap-2 group border border-red-500/30"
+      >
+        <div className="relative flex items-center">
+          <ShoppingCart className="h-6 w-6" />
+          {cart.length > 0 && (
+            <span className="absolute -top-3 -right-3 bg-yellow-400 text-red-950 text-[10px] font-black w-5.5 h-5.5 rounded-full flex items-center justify-center border-2 border-red-600 animate-pulse">
+              {cart.reduce((sum, item) => sum + item.quantity, 0)}
+            </span>
+          )}
+        </div>
+        <span className="max-w-0 overflow-hidden group-hover:max-w-xs transition-all duration-500 ease-in-out text-sm font-black tracking-wide whitespace-nowrap">
+          {t.cart} (${cartTotal})
+        </span>
+      </button>
 
-          {cart.length === 0 ? (
-            <div className="text-center py-10 text-slate-400 flex flex-col items-center justify-center gap-3">
-              <ShoppingBag className="h-10 w-10 text-slate-300" />
-              <p className="text-xs leading-relaxed max-w-[200px]">{t.emptyCart}</p>
-            </div>
-          ) : (
-            <div className="space-y-4">
-              {/* Cart Items list */}
-              <div className="space-y-3 max-h-96 overflow-y-auto">
-                {cart.map((item) => (
-                  <div key={item.id} className="border-b border-slate-100 pb-3 last:border-0 flex justify-between gap-3">
-                    <div className="space-y-0.5 flex-1">
-                      <h4 className="font-bold text-slate-800 text-sm">
-                        {lang === 'zh' ? item.menuItem.name : item.menuItem.nameEn}
-                      </h4>
-                      {item.selectedModifiers.length > 0 && (
-                        <div className="flex flex-wrap gap-1">
-                          {item.selectedModifiers.map(mod => (
-                            <span key={mod} className="bg-slate-100 border border-slate-200 px-1.5 py-0.5 rounded text-[10px] text-slate-600 font-medium">
-                              {mod}
-                            </span>
-                          ))}
-                        </div>
-                      )}
-                      {item.remarks && (
-                        <p className="text-rose-600 text-xs italic bg-rose-50/50 p-1.5 rounded border border-rose-100/50">
-                          「 {item.remarks} 」
-                        </p>
-                      )}
-                    </div>
-                    <div className="text-right shrink-0 flex flex-col justify-between items-end">
-                      <span className="font-mono font-bold text-sm text-slate-800">
-                        {currencySymbol}{item.menuItem.price}
-                      </span>
-                      <button
-                        onClick={() => handleRemoveFromCart(item.id)}
-                        className="text-xs text-rose-500 hover:text-rose-600 font-bold underline mt-1 cursor-pointer"
-                      >
-                        移除
-                      </button>
-                    </div>
-                  </div>
-                ))}
-              </div>
+      {/* Floating Drawer Shopping Cart Window */}
+      {isCartOpen && (
+        <div className="fixed inset-0 z-50 overflow-hidden">
+          {/* Backdrop overlay */}
+          <div 
+            className="absolute inset-0 bg-slate-900/60 backdrop-blur-xs transition-opacity cursor-pointer"
+            onClick={() => setIsCartOpen(false)}
+          />
 
-              {/* Subtotal & Minimum Spend Limit Check */}
-              <div className="border-t border-slate-100 pt-4 space-y-3">
-                <div className="flex justify-between items-center">
-                  <span className="text-sm font-bold text-slate-500">{t.subtotal}</span>
-                  <span className="font-mono text-base font-black text-slate-800">{currencySymbol}{cartTotal}</span>
+          <div className="fixed inset-y-0 right-0 max-w-full flex pl-10">
+            {/* Slide-over panel */}
+            <div className="w-screen max-w-md bg-white shadow-2xl flex flex-col h-full transform transition-transform animate-in slide-in-from-right duration-300">
+              {/* Header */}
+              <div className="bg-slate-900 text-white px-6 py-5 flex items-center justify-between shadow-md">
+                <div className="flex items-center gap-2.5">
+                  <ShoppingCart className="h-6 w-6 text-red-400" />
+                  <h2 className="text-lg font-black tracking-wide">{t.cart}</h2>
+                  <span className="bg-slate-800 text-slate-300 text-xs font-black px-2.5 py-0.5 rounded-full border border-slate-700/60">
+                    {cart.reduce((sum, item) => sum + item.quantity, 0)} {lang === 'zh' ? '份' : 'items'}
+                  </span>
                 </div>
-
-                {/* Minimum spend alert info */}
-                {isBelowMinSpend && (
-                  <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 text-amber-800 flex items-start gap-2.5">
-                    <AlertTriangle className="h-4 w-4 text-amber-600 shrink-0 mt-0.5" />
-                    <div className="text-xs">
-                      <p className="font-bold">未達低消門檻 (Minimum Spend Limit)</p>
-                      <p className="text-amber-700 mt-0.5">
-                        {t.minSpendMsg}{(minSpendLimit - cartTotal).toFixed(0)}。
-                      </p>
-                    </div>
-                  </div>
-                )}
-
-                <div className="flex justify-between items-center text-lg border-t border-slate-200 pt-3 font-black">
-                  <span className="text-slate-800">{t.total}</span>
-                  <span className="font-mono text-2xl text-red-600">{currencySymbol}{cartTotal}</span>
-                </div>
-
                 <button
-                  onClick={handlePlaceOrder}
-                  disabled={isBelowMinSpend}
-                  className={`w-full py-3.5 rounded-xl font-extrabold text-white text-center shadow-lg transition-all ${
-                    isBelowMinSpend
-                      ? 'bg-slate-300 shadow-none cursor-not-allowed text-slate-500'
-                      : 'bg-red-600 hover:bg-red-700 hover:shadow-red-500/20 shadow-md cursor-pointer'
-                  }`}
+                  onClick={() => setIsCartOpen(false)}
+                  className="text-slate-400 hover:text-white font-extrabold text-sm flex items-center gap-1 bg-slate-800 hover:bg-slate-750 px-3 py-1.5 rounded-xl transition cursor-pointer border-none outline-none"
                 >
-                  {t.placeOrder}
+                  <span>收合</span>
+                  <span className="text-lg">&times;</span>
                 </button>
               </div>
+
+              {/* Body */}
+              <div className="flex-1 overflow-y-auto p-6 space-y-4">
+                {cart.length === 0 ? (
+                  <div className="text-center py-20 text-slate-400 flex flex-col items-center justify-center gap-4">
+                    <div className="bg-slate-50 p-6 rounded-full border border-slate-100">
+                      <ShoppingBag className="h-12 w-12 text-slate-300" />
+                    </div>
+                    <p className="text-xs leading-relaxed max-w-[200px]">{t.emptyCart}</p>
+                  </div>
+                ) : (
+                  <div className="space-y-4 divide-y divide-slate-100">
+                    {cart.map((item, idx) => (
+                      <div key={item.id} className={`pt-4 ${idx === 0 ? 'pt-0 border-t-0' : ''} flex justify-between gap-3`}>
+                        <div className="space-y-1.5 flex-1">
+                          <h4 className="font-extrabold text-slate-800 text-sm">
+                            {lang === 'zh' ? item.menuItem.name : item.menuItem.nameEn}
+                          </h4>
+                          {item.selectedModifiers.length > 0 && (
+                            <div className="flex flex-wrap gap-1">
+                              {item.selectedModifiers.map(mod => (
+                                <span key={mod} className="bg-slate-100 border border-slate-200 px-2 py-0.5 rounded-md text-[10px] text-slate-600 font-bold">
+                                  {mod}
+                                </span>
+                              ))}
+                            </div>
+                          )}
+                          {item.remarks && (
+                            <p className="text-rose-600 text-xs italic bg-rose-50/50 p-2 rounded-xl border border-rose-100/50">
+                              「 {item.remarks} 」
+                            </p>
+                          )}
+                        </div>
+                        <div className="text-right shrink-0 flex flex-col justify-between items-end">
+                          <span className="font-mono font-black text-sm text-slate-800">
+                            {currencySymbol}{item.menuItem.price}
+                          </span>
+                          <button
+                            onClick={() => handleRemoveFromCart(item.id)}
+                            className="text-xs text-rose-500 hover:text-rose-600 font-bold underline mt-1.5 cursor-pointer bg-transparent border-none"
+                          >
+                            移除
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Footer */}
+              {cart.length > 0 && (
+                <div className="bg-slate-50 p-6 border-t border-slate-100 space-y-4">
+                  <div className="flex justify-between items-center">
+                    <span className="text-sm font-bold text-slate-500">{t.subtotal}</span>
+                    <span className="font-mono text-base font-black text-slate-800">{currencySymbol}{cartTotal}</span>
+                  </div>
+
+                  {/* Minimum spend alert info */}
+                  {isBelowMinSpend && (
+                    <div className="bg-amber-50 border border-amber-200 rounded-xl p-3.5 text-amber-800 flex items-start gap-2.5 shadow-sm">
+                      <AlertTriangle className="h-4 w-4 text-amber-600 shrink-0 mt-0.5" />
+                      <div className="text-xs">
+                        <p className="font-bold">未達低消門檻 (Minimum Spend Limit)</p>
+                        <p className="text-amber-700 mt-0.5">
+                          {t.minSpendMsg}{(minSpendLimit - cartTotal).toFixed(0)}。
+                        </p>
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="flex justify-between items-center text-lg border-t border-slate-200 pt-4 font-black">
+                    <span className="text-slate-800">{t.total}</span>
+                    <span className="font-mono text-2xl text-red-600">{currencySymbol}{cartTotal}</span>
+                  </div>
+
+                  <button
+                    onClick={() => {
+                      handlePlaceOrder();
+                      setIsCartOpen(false);
+                    }}
+                    disabled={isBelowMinSpend}
+                    className={`w-full py-4 rounded-xl font-extrabold text-white text-center shadow-lg transition-all ${
+                      isBelowMinSpend
+                        ? 'bg-slate-300 shadow-none cursor-not-allowed text-slate-500'
+                        : 'bg-red-600 hover:bg-red-700 hover:shadow-red-500/20 shadow-md cursor-pointer'
+                    }`}
+                  >
+                    {t.placeOrder}
+                  </button>
+                </div>
+              )}
             </div>
-          )}
-        </section>
-      </div>
+          </div>
+        </div>
+      )}
 
       {/* Modifier Selection Modal Dialog */}
       {selectedMenuItem && (
@@ -600,6 +672,76 @@ export const CustomerOrderView: React.FC = () => {
           </div>
         </div>
       )}
+
+      {/* CUSTOM MODAL: IDENTITY CONFIRMATION FOR STAFF AREA */}
+      <AnimatePresence>
+        {showStaffConfirm && (
+          <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-50 flex items-center justify-center p-4">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 15 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 15 }}
+              className="bg-slate-900 border border-slate-800 w-full max-w-md rounded-3xl p-6 shadow-2xl relative text-slate-100"
+            >
+              <button
+                onClick={() => setShowStaffConfirm(false)}
+                className="absolute right-4 top-4 text-slate-400 hover:text-white p-1 rounded-full bg-slate-850 hover:bg-slate-800 cursor-pointer"
+              >
+                <X className="h-4.5 w-4.5" />
+              </button>
+
+              <div className="flex items-center gap-3 text-yellow-400 mb-2">
+                <div className="bg-yellow-500/15 p-2 rounded-xl border border-yellow-500/30">
+                  <Shield className="h-5 w-5 stroke-[2.5]" />
+                </div>
+                <h2 className="text-lg font-black text-slate-100">
+                  {lang === 'zh' ? '確認進入員工專區？' : 'Access Staff Area?'}
+                </h2>
+              </div>
+              
+              <p className="text-xs text-slate-400 mb-4 leading-relaxed">
+                {lang === 'zh' 
+                  ? '本專區僅限 Sabay Thai BBQ 現場店員或系統管理員使用。進入後管理員需提供帳號與密碼以供驗證，店員需輸入 6 位數 PIN 碼。' 
+                  : 'This area is restricted to authorized on-site staff and administrators. Admin credentials or a 6-digit security PIN is required to proceed.'}
+              </p>
+
+              <div className="bg-indigo-500/10 border border-indigo-500/20 rounded-2xl p-4 text-xs text-indigo-300 mb-6 space-y-2 leading-relaxed">
+                <h4 className="font-bold flex items-center gap-1.5">
+                  <Lock className="h-3.5 w-3.5 text-indigo-400" />
+                  <span>{lang === 'zh' ? '安全身分提示：' : 'Security Notice:'}</span>
+                </h4>
+                <p>
+                  {lang === 'zh' 
+                    ? '顧客請勿擅自闖入。若您是店內工作人員，請點選「確認並前往驗證」按鈕；一般顧客請點選「取消」返回。' 
+                    : 'Customers are kindly requested to remain on the ordering page. If you are a staff member, click "Confirm and Verify".'}
+                </p>
+              </div>
+
+              <div className="flex items-center gap-3 pt-4 border-t border-slate-800/60">
+                <button
+                  type="button"
+                  onClick={() => setShowStaffConfirm(false)}
+                  className="flex-1 py-2.5 bg-slate-800 hover:bg-slate-750 text-slate-300 font-bold text-xs rounded-xl transition-colors cursor-pointer border border-slate-700/60"
+                >
+                  {lang === 'zh' ? '取消返回' : 'Cancel'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowStaffConfirm(false);
+                    navigate(`/FSY20260606?tenantId=${tenantId}`);
+                  }}
+                  className="flex-1 py-2.5 bg-gradient-to-r from-yellow-500 to-amber-500 hover:from-yellow-400 hover:to-amber-400 text-slate-950 font-black text-xs rounded-xl shadow-lg transition-all cursor-pointer flex items-center justify-center gap-1.5"
+                >
+                  <Lock className="h-3.5 w-3.5" />
+                  <span>{lang === 'zh' ? '確認並前往驗證' : 'Confirm & Proceed'}</span>
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
     </div>
   );
 };

@@ -18,7 +18,9 @@ import {
   HelpCircle,
   RefreshCw,
   Globe,
-  Settings
+  Settings,
+  Lock,
+  AlertTriangle
 } from 'lucide-react';
 
 export const TenantManagementView: React.FC = () => {
@@ -31,7 +33,9 @@ export const TenantManagementView: React.FC = () => {
     deleteTenant,
     orders,
     isOnline,
-    simulatedOffline
+    simulatedOffline,
+    syncLogs,
+    clearSyncLogs
   } = useOfflineQueue();
 
   const isEffectiveOnline = isOnline && !simulatedOffline;
@@ -40,6 +44,107 @@ export const TenantManagementView: React.FC = () => {
   const [showAddForm, setShowAddForm] = useState(false);
   const [editingTenant, setEditingTenant] = useState<Tenant | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
+
+  // Multi-selection and Batch Delete state
+  const [selectedTenantIds, setSelectedTenantIds] = useState<string[]>([]);
+  const [showBatchDeleteModal, setShowBatchDeleteModal] = useState(false);
+  const [isDeletingBatch, setIsDeletingBatch] = useState(false);
+
+  // Temporary Delete / Undo states
+  const [pendingDeleteIds, setPendingDeleteIds] = useState<string[]>([]);
+  const [undoCountDown, setUndoCountDown] = useState<number>(0);
+  const countdownIntervalRef = React.useRef<any>(null);
+
+  React.useEffect(() => {
+    if (undoCountDown > 0) {
+      countdownIntervalRef.current = setTimeout(() => {
+        setUndoCountDown(prev => prev - 1);
+      }, 1000);
+    } else if (undoCountDown === 0 && pendingDeleteIds.length > 0) {
+      const executeActualDelete = async () => {
+        setIsDeletingBatch(true);
+        try {
+          for (const tenantId of pendingDeleteIds) {
+            if (tenantId === 'DEFAULT') continue;
+            await deleteTenant(tenantId);
+            if (currentTenantId === tenantId) {
+              setCurrentTenantId('DEFAULT');
+            }
+          }
+          alert('已成功批次刪除選定的分店租戶！');
+        } catch (err: any) {
+          alert('部分或全部分店刪除失敗：' + err.message);
+        } finally {
+          setIsDeletingBatch(false);
+          setPendingDeleteIds([]);
+        }
+      };
+      executeActualDelete();
+    }
+
+    return () => {
+      if (countdownIntervalRef.current) {
+        clearTimeout(countdownIntervalRef.current);
+      }
+    };
+  }, [undoCountDown, pendingDeleteIds]);
+
+  const handleBatchDelete = () => {
+    const idsToTemporaryDelete = selectedTenantIds.filter(id => id !== 'DEFAULT');
+    if (idsToTemporaryDelete.length === 0) return;
+
+    setPendingDeleteIds(idsToTemporaryDelete);
+    setSelectedTenantIds([]);
+    setShowBatchDeleteModal(false);
+    setUndoCountDown(10);
+  };
+
+  const handleUndoBatchDelete = () => {
+    if (countdownIntervalRef.current) {
+      clearTimeout(countdownIntervalRef.current);
+    }
+    setPendingDeleteIds([]);
+    setUndoCountDown(0);
+  };
+
+  // Custom delete confirmation modal state
+  const [deleteConfirmation, setDeleteConfirmation] = useState<{
+    isOpen: boolean;
+    tenantId: string;
+    tenantName: string;
+  }>({
+    isOpen: false,
+    tenantId: '',
+    tenantName: ''
+  });
+
+  // Backend PIN State
+  const [adminPin, setAdminPin] = useState(() => {
+    return localStorage.getItem('sabay_thai_admin_pin') || 'Eur0pe2266';
+  });
+  const [newPinInput, setNewPinInput] = useState('');
+  const [pinError, setPinError] = useState('');
+  const [pinSuccess, setPinSuccess] = useState(false);
+
+  const handleUpdatePin = (e: React.FormEvent) => {
+    e.preventDefault();
+    setPinError('');
+    setPinSuccess(false);
+
+    const trimmed = newPinInput.trim();
+    if (trimmed.length < 6) {
+      setPinError('安全密碼長度必須至少為 6 位！');
+      return;
+    }
+
+    localStorage.setItem('sabay_thai_admin_pin', trimmed);
+    setAdminPin(trimmed);
+    setNewPinInput('');
+    setPinSuccess(true);
+    setTimeout(() => {
+      setPinSuccess(false);
+    }, 3000);
+  };
   
   // Create Tenant form state
   const [newId, setNewId] = useState('');
@@ -121,6 +226,7 @@ export const TenantManagementView: React.FC = () => {
       setNewPhone('');
       setNewAddress('');
       setShowAddForm(false);
+      alert('已成功建立分店租戶「' + newTenantObj.name + '」！');
     } catch (err: any) {
       setFormError('新增失敗：' + err.message);
     }
@@ -178,34 +284,50 @@ export const TenantManagementView: React.FC = () => {
   };
 
   // Delete tenant
-  const handleDeleteTenant = async (tenantId: string, tenantName: string) => {
+  const handleDeleteTenant = (tenantId: string, tenantName: string) => {
     if (tenantId === 'DEFAULT') {
       alert('系統 DEFAULT 預設總店為關鍵主租戶，不可刪除！');
       return;
     }
-    const confirmMsg = `警告：您確定要刪除「${tenantName} (${tenantId})」分店嗎？\n此操作將移除該分店的配置，且該分店的訂單在雲端將會被隔離！`;
-    if (confirm(confirmMsg)) {
-      try {
-        await deleteTenant(tenantId);
-        if (currentTenantId === tenantId) {
-          setCurrentTenantId('DEFAULT');
-        }
-      } catch (err: any) {
-        alert('刪除失敗：' + err.message);
-      }
-    }
+    setDeleteConfirmation({
+      isOpen: true,
+      tenantId,
+      tenantName
+    });
   };
 
   // Filtered tenants based on search bar
-  const filteredTenants = tenants.filter(t =>
-    t.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    t.id.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    (t.address && t.address.toLowerCase().includes(searchQuery.toLowerCase()))
-  );
+  const filteredTenants = tenants
+    .filter(t => !pendingDeleteIds.includes(t.id))
+    .filter(t =>
+      t.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      t.id.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (t.address && t.address.toLowerCase().includes(searchQuery.toLowerCase()))
+    );
 
   return (
     <div className="flex-1 bg-slate-950 text-slate-100 min-h-screen p-6 pb-12">
       
+      {/* Floating temporary update notification */}
+      <AnimatePresence>
+        {pinSuccess && (
+          <motion.div
+            initial={{ opacity: 0, y: -50, scale: 0.9 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: -20, scale: 0.9 }}
+            className="fixed top-6 right-6 z-[999] flex items-center gap-3.5 bg-slate-900/95 backdrop-blur-xl border border-emerald-500/40 px-5 py-4 rounded-2xl shadow-2xl shadow-emerald-500/10 min-w-[280px]"
+          >
+            <div className="bg-emerald-500/15 text-emerald-400 p-2.5 rounded-xl border border-emerald-500/30 flex items-center justify-center shrink-0 animate-pulse">
+              <Check className="h-5 w-5 stroke-[3]" />
+            </div>
+            <div>
+              <h4 className="text-sm font-black text-white">成功更新</h4>
+              <p className="text-[11px] text-emerald-400 font-bold mt-0.5">當前 PIN 碼已更新</p>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       {/* Header Banner */}
       <motion.div 
         initial={{ opacity: 0, y: -20 }}
@@ -230,7 +352,11 @@ export const TenantManagementView: React.FC = () => {
           </div>
           
           <button
-            onClick={() => setShowAddForm(true)}
+            onClick={() => {
+              const gen = 'BR_' + Math.random().toString(36).substring(2, 8).toUpperCase();
+              setNewId(gen);
+              setShowAddForm(true);
+            }}
             className="flex items-center gap-2 bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-500 hover:to-indigo-500 text-white font-bold text-sm px-5 py-3 rounded-2xl shadow-lg shadow-violet-500/20 hover:shadow-violet-500/30 transition-all cursor-pointer w-fit"
           >
             <Plus className="h-4.5 w-4.5" />
@@ -263,16 +389,51 @@ export const TenantManagementView: React.FC = () => {
           
           {/* Search Bar & Stats */}
           <div className="flex flex-col md:flex-row gap-4 items-center justify-between bg-slate-900 border border-slate-800 p-4 rounded-2xl shadow-lg">
-            <div className="w-full md:w-72 relative">
-              <input
-                type="text"
-                placeholder="搜尋分店代碼、名稱或地址..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full bg-slate-950 border border-slate-800 px-4 py-2.5 rounded-xl text-xs text-slate-100 placeholder-slate-500 focus:outline-none focus:border-violet-500 transition-colors"
-              />
+            <div className="w-full md:w-80 flex items-center gap-3">
+              {/* Checkbox for Select All */}
+              {(() => {
+                const deletableFiltered = filteredTenants.filter(t => t.id !== 'DEFAULT');
+                const isAllSelected = deletableFiltered.length > 0 && deletableFiltered.every(t => selectedTenantIds.includes(t.id));
+                return (
+                  <div className="flex items-center justify-center shrink-0" title="全選/取消全選本頁可刪除分店">
+                    <input
+                      type="checkbox"
+                      checked={isAllSelected}
+                      disabled={deletableFiltered.length === 0}
+                      onChange={(e) => {
+                        const checked = e.target.checked;
+                        if (checked) {
+                          setSelectedTenantIds(prev => {
+                            const combined = new Set([...prev, ...deletableFiltered.map(t => t.id)]);
+                            return Array.from(combined);
+                          });
+                        } else {
+                          const deletableSet = new Set(deletableFiltered.map(t => t.id));
+                          setSelectedTenantIds(prev => prev.filter(id => !deletableSet.has(id)));
+                        }
+                      }}
+                      className="h-4.5 w-4.5 text-violet-600 bg-slate-950 border-slate-800 rounded focus:ring-violet-500 cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed"
+                    />
+                  </div>
+                );
+              })()}
+              
+              <div className="relative flex-1">
+                <input
+                  type="text"
+                  placeholder="搜尋分店代碼、名稱或地址..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="w-full bg-slate-950 border border-slate-800 px-4 py-2.5 rounded-xl text-xs text-slate-100 placeholder-slate-500 focus:outline-none focus:border-violet-500 transition-colors"
+                />
+              </div>
             </div>
             <div className="flex items-center gap-6 text-xs text-slate-400">
+              {selectedTenantIds.length > 0 && (
+                <div className="text-violet-400 font-bold bg-violet-500/10 border border-violet-500/20 px-2.5 py-1 rounded-md text-[10px] uppercase font-mono animate-pulse">
+                  已選 {selectedTenantIds.length} 間
+                </div>
+              )}
               <div>
                 集團分店總數：<span className="text-violet-400 font-bold font-mono">{tenants.length}</span> 家
               </div>
@@ -281,6 +442,44 @@ export const TenantManagementView: React.FC = () => {
               </div>
             </div>
           </div>
+
+          {/* Batch Action Floating/Sticky Bar */}
+          <AnimatePresence>
+            {selectedTenantIds.length > 0 && (
+              <motion.div
+                initial={{ opacity: 0, height: 0, y: -10 }}
+                animate={{ opacity: 1, height: 'auto', y: 0 }}
+                exit={{ opacity: 0, height: 0, y: -10 }}
+                className="bg-indigo-950/40 border border-indigo-500/30 p-4 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-4 overflow-hidden"
+              >
+                <div className="flex items-center gap-3">
+                  <div className="bg-indigo-500/20 text-indigo-300 p-2 rounded-xl border border-indigo-500/30">
+                    <Building className="h-4 w-4" />
+                  </div>
+                  <div>
+                    <h4 className="text-xs font-black text-white">已選取 {selectedTenantIds.length} 個分店租戶</h4>
+                    <p className="text-[11px] text-slate-400 font-medium">您可以對所選分店進行批次刪除，或是清除選取。</p>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2 shrink-0">
+                  <button
+                    onClick={() => setSelectedTenantIds([])}
+                    className="px-3 py-1.5 bg-slate-850 hover:bg-slate-800 text-slate-300 text-xs font-bold rounded-xl transition-colors cursor-pointer border border-slate-700/60"
+                  >
+                    取消選取
+                  </button>
+                  <button
+                    onClick={() => setShowBatchDeleteModal(true)}
+                    className="flex items-center gap-1.5 px-4 py-1.5 bg-red-600 hover:bg-red-500 text-white text-xs font-black rounded-xl shadow-lg shadow-red-500/10 hover:shadow-red-500/20 transition-all cursor-pointer"
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                    <span>批次刪除 ({selectedTenantIds.length})</span>
+                  </button>
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
 
           {/* Tenants Grid */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -311,7 +510,26 @@ export const TenantManagementView: React.FC = () => {
                       {/* Top Bar inside Card */}
                       <div className="flex justify-between items-start gap-2 mb-4">
                         <div>
-                          <div className="flex items-center gap-2">
+                          <div className="flex items-center gap-2.5">
+                            {tenant.id !== 'DEFAULT' ? (
+                              <input
+                                type="checkbox"
+                                checked={selectedTenantIds.includes(tenant.id)}
+                                onChange={(e) => {
+                                  e.stopPropagation();
+                                  setSelectedTenantIds(prev =>
+                                    prev.includes(tenant.id)
+                                      ? prev.filter(id => id !== tenant.id)
+                                      : [...prev, tenant.id]
+                                  );
+                                }}
+                                className="h-4.5 w-4.5 text-violet-600 bg-slate-950 border-slate-800 rounded focus:ring-violet-500 cursor-pointer shrink-0"
+                              />
+                            ) : (
+                              <div className="h-4.5 w-4.5 flex items-center justify-center opacity-30 shrink-0" title="DEFAULT 預設總店不可刪除">
+                                <Lock className="h-3.5 w-3.5 text-slate-400" />
+                              </div>
+                            )}
                             <h3 className="font-extrabold text-base text-slate-100 tracking-tight">
                               {tenant.name}
                             </h3>
@@ -326,17 +544,40 @@ export const TenantManagementView: React.FC = () => {
                         </div>
                         
                         {/* Status Dot */}
-                        <span className="flex h-2.5 w-2.5 relative">
-                          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                          <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500"></span>
-                        </span>
+                        {(() => {
+                          const lastHb = tenant.lastHeartbeat;
+                          const isOnline = lastHb && (Date.now() - new Date(lastHb).getTime() < 5 * 60 * 1000);
+                          const lastTimeStr = lastHb ? new Date(lastHb).toLocaleTimeString('zh-TW', { hour12: false }) : null;
+                          return (
+                            <div className="flex items-center gap-1.5 bg-slate-950/60 px-2.5 py-1 rounded-xl border border-slate-800/80 shrink-0">
+                              <span className="flex h-2 w-2 relative">
+                                {isOnline ? (
+                                  <>
+                                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                                    <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+                                  </>
+                                ) : (
+                                  <span className="relative inline-flex rounded-full h-2 w-2 bg-red-500 animate-pulse"></span>
+                                )}
+                              </span>
+                              <span className={`text-[10px] font-extrabold ${isOnline ? 'text-emerald-400' : 'text-red-400'}`} title={lastHb ? `最後心跳：${new Date(lastHb).toLocaleString('zh-TW')}` : '無連線紀錄'}>
+                                {isOnline ? '連線中' : '已離線'}
+                              </span>
+                              {lastTimeStr && (
+                                <span className="text-[8px] text-slate-500 font-mono tracking-tighter">
+                                  {lastTimeStr}
+                                </span>
+                              )}
+                            </div>
+                          );
+                        })()}
                       </div>
 
                       {/* Detail list */}
                       <div className="space-y-2.5 text-xs border-t border-slate-800/60 pt-4 mb-4">
                         <div className="flex items-center gap-2 text-slate-300">
                           <DollarSign className="h-3.5 w-3.5 text-violet-400" />
-                          <span>最低消費：<strong className="text-slate-100">{tenant.currency}{tenant.minSpend}</strong> / 每桌</span>
+                          <span>���低消費：<strong className="text-slate-100">{tenant.currency}{tenant.minSpend}</strong> / 每桌</span>
                         </div>
                         <div className="flex items-start gap-2 text-slate-300">
                           <Layers className="h-3.5 w-3.5 text-indigo-400 mt-0.5" />
@@ -489,6 +730,105 @@ export const TenantManagementView: React.FC = () => {
             </div>
           </div>
 
+          {/* Backend Security PIN Settings Card */}
+          <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 shadow-xl">
+            <h2 className="text-sm font-extrabold text-slate-200 mb-3 flex items-center gap-1.5">
+              <Lock className="h-4 w-4 text-red-500" />
+              安全防護：後台管理安全密碼設定
+            </h2>
+            <p className="text-slate-500 text-[11px] mb-4">
+              此設定能防範未授權人員進入管理面板。您可以自訂後台安全管理密碼（預設為 Eur0pe2266）。
+            </p>
+
+            <div className="bg-slate-950/60 p-3.5 rounded-xl border border-slate-850 mb-4 flex items-center justify-between">
+              <div>
+                <span className="text-[10px] text-slate-500 font-bold block uppercase">當前作用中密碼</span>
+                <span className="font-mono text-sm font-black text-slate-200 tracking-wider">
+                  {adminPin.length >= 4 ? `${adminPin.slice(0, 3)}••••` : '••••••'}
+                </span>
+              </div>
+              <span className="bg-red-500/10 border border-red-500/20 text-red-400 text-[10px] px-2 py-0.5 rounded-md font-bold uppercase">
+                ACTIVE
+              </span>
+            </div>
+
+            <form onSubmit={handleUpdatePin} className="space-y-3">
+              <div>
+                <label className="block text-[11px] font-bold text-slate-400 mb-1">
+                  請輸入新的安全管理密碼 (至少 6 位)
+                </label>
+                <input
+                  type="password"
+                  placeholder="例如: Eur0pe2266"
+                  value={newPinInput}
+                  onChange={(e) => setNewPinInput(e.target.value)}
+                  className="w-full bg-slate-950 border border-slate-800 px-3 py-2 rounded-xl text-xs text-slate-100 placeholder-slate-600 font-mono tracking-widest focus:outline-none focus:border-red-500 text-center animate-none"
+                />
+              </div>
+
+              {pinError && (
+                <div className="text-[11px] text-red-400 font-bold bg-red-500/10 border border-red-500/20 px-3 py-1.5 rounded-lg">
+                  ⚠️ {pinError}
+                </div>
+              )}
+
+              {pinSuccess && (
+                <div className="text-[11px] text-emerald-400 font-bold bg-emerald-500/10 border border-emerald-500/20 px-3 py-1.5 rounded-lg flex items-center gap-1.5 animate-bounce">
+                  <Check className="h-3.5 w-3.5" />
+                  <span>成功更新！當前管理密碼已更新。</span>
+                </div>
+              )}
+
+              <button
+                type="submit"
+                className="w-full py-2 bg-gradient-to-r from-red-600 to-rose-600 hover:from-red-500 hover:to-rose-500 text-white font-bold text-xs rounded-xl shadow-lg shadow-red-500/10 hover:shadow-red-500/20 transition-all cursor-pointer"
+              >
+                儲存新密碼
+              </button>
+            </form>
+          </div>
+
+          {/* Offline Sync Log Clearance and Archiving Card */}
+          <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 shadow-xl">
+            <h2 className="text-sm font-extrabold text-slate-200 mb-3 flex items-center gap-1.5">
+              <RefreshCw className="h-4 w-4 text-emerald-400" />
+              數據管理：清理已同步日誌
+            </h2>
+            <p className="text-slate-500 text-[11px] mb-4">
+              手動清除已成功同步並本機封存的離線數據佇列紀錄，避免長期運作後的資料累積。
+            </p>
+
+            {syncLogs.length > 0 ? (
+              <div className="space-y-3">
+                <div className="bg-slate-950/60 p-3 rounded-xl border border-slate-850 max-h-36 overflow-y-auto space-y-2 font-mono">
+                  {syncLogs.map((log) => (
+                    <div key={log.id} className="text-[10px] flex items-start justify-between gap-2 border-b border-slate-800/40 pb-2 last:border-0 last:pb-0">
+                      <div>
+                        <span className="font-bold text-slate-300 block">{log.description}</span>
+                        <span className="text-slate-500 block mt-0.5">ID: {log.id} | {new Date(log.syncedAt).toLocaleTimeString()}</span>
+                      </div>
+                      <span className="bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 text-[9px] font-bold px-1 py-0.5 rounded shrink-0">
+                        SUCCESS
+                      </span>
+                    </div>
+                  ))}
+                </div>
+
+                <button
+                  onClick={clearSyncLogs}
+                  className="w-full py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-white font-bold text-xs rounded-xl border border-slate-750 transition-all cursor-pointer flex items-center justify-center gap-1.5"
+                >
+                  <Trash2 className="h-3.5 w-3.5 text-red-400" />
+                  <span>清除 {syncLogs.length} 筆已同步日誌</span>
+                </button>
+              </div>
+            ) : (
+              <div className="bg-slate-950/60 p-5 rounded-xl border border-slate-850 text-center">
+                <span className="text-[11px] text-slate-500 block font-bold">目前暫無已成功同步的歷史日誌</span>
+              </div>
+            )}
+          </div>
+
         </div>
 
       </div>
@@ -520,18 +860,26 @@ export const TenantManagementView: React.FC = () => {
               
               <div>
                 <label className="block text-xs font-bold text-slate-400 mb-1">
-                  1. 租戶唯一代碼 (Tenant ID) *
+                  1. 租戶唯一代碼 (Tenant ID) * [系統自動生成]
                 </label>
-                <input
-                  type="text"
-                  placeholder="例如: SOUTH_BRANCH, TPE_101"
-                  value={newId}
-                  onChange={(e) => setNewId(e.target.value)}
-                  className="w-full bg-slate-950 border border-slate-800 px-3.5 py-2.5 rounded-xl text-xs text-slate-100 focus:outline-none focus:border-violet-500 uppercase font-mono"
-                  required
-                />
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={newId}
+                    readOnly
+                    className="flex-1 bg-slate-950 border border-slate-850 px-3.5 py-2.5 rounded-xl text-xs text-slate-400 font-mono focus:outline-none uppercase"
+                    required
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setNewId('BR_' + Math.random().toString(36).substring(2, 8).toUpperCase())}
+                    className="bg-slate-800 hover:bg-slate-750 text-slate-300 px-3.5 py-1 text-xs rounded-xl border border-slate-700 cursor-pointer transition-colors"
+                  >
+                    重新生成
+                  </button>
+                </div>
                 <span className="text-[10px] text-slate-500 mt-1 block">
-                  建立後不可更改，僅限大寫英文、數字、減號、底線。
+                  系統為確保多租戶資料庫安全與分店資料隔離所自動配置的唯一 ID 代碼。
                 </span>
               </div>
 
@@ -642,7 +990,7 @@ export const TenantManagementView: React.FC = () => {
                 <button
                   type="button"
                   onClick={() => setShowAddForm(false)}
-                  className="flex-1 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold text-xs rounded-xl transition-colors cursor-pointer"
+                  className="flex-1 py-2.5 bg-slate-800 hover:bg-slate-750 text-slate-300 font-bold text-xs rounded-xl transition-colors cursor-pointer"
                 >
                   取消
                 </button>
@@ -805,6 +1153,187 @@ export const TenantManagementView: React.FC = () => {
           </motion.div>
         </div>
       )}
+
+      {/* MODAL 3: BATCH DELETE CONFIRMATION FORM */}
+      {showBatchDeleteModal && (
+        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-50 flex items-center justify-center p-4">
+          <motion.div 
+            initial={{ opacity: 0, scale: 0.95, y: 15 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            className="bg-slate-900 border border-slate-800 w-full max-w-md rounded-3xl p-6 shadow-2xl relative max-h-[90vh] overflow-y-auto"
+          >
+            <button
+              onClick={() => !isDeletingBatch && setShowBatchDeleteModal(false)}
+              className="absolute right-4 top-4 text-slate-400 hover:text-white p-1 rounded-full bg-slate-800 cursor-pointer"
+              disabled={isDeletingBatch}
+            >
+              <X className="h-4.5 w-4.5" />
+            </button>
+
+            <div className="flex items-center gap-3 text-red-400 mb-2">
+              <div className="bg-red-500/15 p-2 rounded-xl border border-red-500/30">
+                <AlertTriangle className="h-5 w-5 stroke-[2.5]" />
+              </div>
+              <h2 className="text-lg font-black text-slate-100">
+                確認批次刪除分店？
+              </h2>
+            </div>
+            
+            <p className="text-xs text-slate-400 mb-4">
+              您即將進行高風險的批次刪除操作。請確認以下 <span className="text-red-400 font-bold font-mono">{selectedTenantIds.length}</span> 間分店將被永久移除：
+            </p>
+
+            {/* Selected Tenants List */}
+            <div className="bg-slate-950 border border-slate-850 rounded-2xl p-3 max-h-48 overflow-y-auto mb-5 space-y-2">
+              {tenants
+                .filter(t => selectedTenantIds.includes(t.id))
+                .map(t => (
+                  <div key={t.id} className="flex justify-between items-center text-xs p-2 bg-slate-900/60 rounded-xl border border-slate-800">
+                    <span className="font-bold text-slate-200">{t.name}</span>
+                    <span className="text-[10px] font-mono text-slate-500 uppercase px-2 py-0.5 bg-slate-950 rounded border border-slate-800">
+                      {t.id}
+                    </span>
+                  </div>
+                ))}
+            </div>
+
+            <div className="bg-red-500/10 border border-red-500/20 rounded-2xl p-4 text-xs text-red-400 mb-6 space-y-2 leading-relaxed">
+              <h4 className="font-bold flex items-center gap-1">
+                ⚠️ 重要警示：
+              </h4>
+              <p>此動作將永久移除上述分店的所有系統配置。這些分店原本在雲端所產生的點餐資料與出餐訂單將會被完全隔離。此操作無法復原，請再次核實！</p>
+            </div>
+
+            <div className="flex items-center gap-3 pt-4 border-t border-slate-800/60">
+              <button
+                type="button"
+                onClick={() => setShowBatchDeleteModal(false)}
+                className="flex-1 py-2.5 bg-slate-800 hover:bg-slate-750 text-slate-300 font-bold text-xs rounded-xl transition-colors cursor-pointer border border-slate-700/60"
+                disabled={isDeletingBatch}
+              >
+                取消
+              </button>
+              <button
+                type="button"
+                onClick={handleBatchDelete}
+                className="flex-1 py-2.5 bg-gradient-to-r from-red-600 to-rose-600 hover:from-red-500 hover:to-rose-500 text-white font-bold text-xs rounded-xl shadow-lg shadow-red-500/20 hover:shadow-red-500/30 transition-all cursor-pointer flex items-center justify-center gap-1.5"
+                disabled={isDeletingBatch}
+              >
+                {isDeletingBatch ? (
+                  <>
+                    <RefreshCw className="h-3.5 w-3.5 animate-spin" />
+                    <span>刪除中...</span>
+                  </>
+                ) : (
+                  <>
+                    <Trash2 className="h-3.5 w-3.5" />
+                    <span>確認永久刪除</span>
+                  </>
+                )}
+              </button>
+            </div>
+
+          </motion.div>
+        </div>
+      )}
+
+      {/* MODAL 4: SINGLE DELETE CONFIRMATION */}
+      {deleteConfirmation.isOpen && (
+        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-50 flex items-center justify-center p-4">
+          <motion.div 
+            initial={{ opacity: 0, scale: 0.95, y: 15 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            className="bg-slate-900 border border-slate-800 w-full max-w-md rounded-3xl p-6 shadow-2xl relative"
+          >
+            <button
+              onClick={() => setDeleteConfirmation({ isOpen: false, tenantId: '', tenantName: '' })}
+              className="absolute right-4 top-4 text-slate-400 hover:text-white p-1 rounded-full bg-slate-800 cursor-pointer"
+            >
+              <X className="h-4.5 w-4.5" />
+            </button>
+
+            <div className="flex items-center gap-3 text-red-400 mb-2">
+              <div className="bg-red-500/15 p-2 rounded-xl border border-red-500/30">
+                <AlertTriangle className="h-5 w-5 stroke-[2.5]" />
+              </div>
+              <h2 className="text-lg font-black text-slate-100">
+                確認刪除分店？
+              </h2>
+            </div>
+            
+            <p className="text-xs text-slate-400 mb-4 leading-relaxed">
+              您確定要刪除「<span className="text-slate-100 font-bold">{deleteConfirmation.tenantName} ({deleteConfirmation.tenantId})</span>」分店嗎？
+            </p>
+
+            <div className="bg-red-500/10 border border-red-500/20 rounded-2xl p-4 text-xs text-red-400 mb-6 space-y-2 leading-relaxed">
+              <h4 className="font-bold">⚠️ 重要警示：</h4>
+              <p>此動作將永久移除該分店的所有系統配置，且該分店在雲端所產生的點餐資料與出餐訂單將會被隔離，此操作無法復原！</p>
+            </div>
+
+            <div className="flex items-center gap-3 pt-4 border-t border-slate-800/60">
+              <button
+                type="button"
+                onClick={() => setDeleteConfirmation({ isOpen: false, tenantId: '', tenantName: '' })}
+                className="flex-1 py-2.5 bg-slate-800 hover:bg-slate-750 text-slate-300 font-bold text-xs rounded-xl transition-colors cursor-pointer border border-slate-700/60"
+              >
+                取消
+              </button>
+              <button
+                type="button"
+                onClick={async () => {
+                  const targetId = deleteConfirmation.tenantId;
+                  try {
+                    await deleteTenant(targetId);
+                    if (currentTenantId === targetId) {
+                      setCurrentTenantId('DEFAULT');
+                    }
+                    setDeleteConfirmation({ isOpen: false, tenantId: '', tenantName: '' });
+                    alert('已成功刪除該分店！');
+                  } catch (err: any) {
+                    alert('刪除失敗：' + err.message);
+                  }
+                }}
+                className="flex-1 py-2.5 bg-gradient-to-r from-red-600 to-rose-600 hover:from-red-500 hover:to-rose-500 text-white font-bold text-xs rounded-xl shadow-lg transition-all cursor-pointer flex items-center justify-center gap-1.5"
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+                <span>確認永久刪除</span>
+              </button>
+            </div>
+          </motion.div>
+        </div>
+      )}
+
+      {/* FLOATING BATCH DELETE UNDO BANNER */}
+      <AnimatePresence>
+        {undoCountDown > 0 && pendingDeleteIds.length > 0 && (
+          <motion.div
+            initial={{ opacity: 0, y: 50 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 50 }}
+            className="fixed bottom-6 left-6 right-6 md:left-auto md:right-6 md:w-[450px] bg-slate-900 border border-red-500/30 p-4 rounded-2xl shadow-2xl z-[99] flex items-center justify-between gap-4"
+          >
+            <div className="flex items-center gap-3">
+              <div className="bg-red-500/10 text-red-400 p-2.5 rounded-xl border border-red-500/20">
+                <Trash2 className="h-4.5 w-4.5 animate-pulse" />
+              </div>
+              <div>
+                <h4 className="text-xs font-black text-slate-100">
+                  已將 {pendingDeleteIds.length} 間分店暫存刪除！
+                </h4>
+                <p className="text-[11px] text-slate-400 font-medium">
+                  資料將在 <span className="text-red-400 font-extrabold font-mono text-sm">{undoCountDown}</span> 秒後永久移除...
+                </p>
+              </div>
+            </div>
+            <button
+              onClick={handleUndoBatchDelete}
+              className="px-4 py-2 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white text-xs font-black rounded-xl shadow-lg shadow-emerald-500/10 transition-all cursor-pointer"
+            >
+              立即復原 (Undo)
+            </button>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
     </div>
   );

@@ -22,11 +22,19 @@ export const ManagerDashboard: React.FC = () => {
     setOrders,
     updateOrderStatus,
     isOnline,
-    simulatedOffline
+    simulatedOffline,
+    session,
+    currentTenantId,
+    syncLogs,
+    clearSyncLogs
   } = useOfflineQueue();
 
-  // Authentication gate
-  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
+  // Enforce data isolation:
+  const activeBranchId = session?.role === 'SUPER_ADMIN' ? currentTenantId : (session?.branchId || 'DEFAULT');
+  const branchOrders = orders.filter(o => o.tenantId === activeBranchId);
+
+  // Authentication gate (Bypassed since already authorized via primary role-based PinGate)
+  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(true);
   const [pin, setPin] = useState<string>('');
   const [pinError, setPinError] = useState<string>('');
 
@@ -146,7 +154,7 @@ export const ManagerDashboard: React.FC = () => {
       'Drawer Kicks': 0
     };
 
-    orders.forEach(o => {
+    branchOrders.forEach(o => {
       if (o.total_amount > 0) {
         totalsByMethod[o.paymentMethod] += o.total_amount;
         // Mock hardware rules based on printer/cash drawer events
@@ -305,7 +313,7 @@ export const ManagerDashboard: React.FC = () => {
       .style('fill', '#cbd5e1')
       .style('font-size', '10px');
 
-  }, [isAuthenticated, orders]);
+  }, [isAuthenticated, branchOrders]);
 
   // Recharts: Prep Category Delays Bottleneck Mock data
   const bottleneckData = [
@@ -407,7 +415,7 @@ export const ManagerDashboard: React.FC = () => {
             高級經理人與對帳決策面板 (Manager Ledger Analytics)
           </h1>
           <p className="text-xs text-slate-400 mt-1">
-            權限狀態：經理人已授權。提供訂單審計、桌號轉移、退款、D3/Recharts 混合營收與製程瓶頸分析。
+            權限狀態：經理人已授權。提供訂單審計、桌號轉移��退款、D3/Recharts 混合營收與製程瓶頸分析。
           </p>
         </div>
       </section>
@@ -510,7 +518,7 @@ export const ManagerDashboard: React.FC = () => {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-800/60">
-              {orders.map(order => (
+              {branchOrders.map(order => (
                 <tr key={order.id} className="hover:bg-slate-900/50 transition-colors">
                   <td className="p-3.5 text-slate-400 font-mono">
                     {new Date(order.timestamp).toLocaleTimeString()}
@@ -565,6 +573,60 @@ export const ManagerDashboard: React.FC = () => {
             </tbody>
           </table>
         </div>
+      </section>
+
+      {/* Centralized Offline Queue & Sync Log Purging Center */}
+      <section className="bg-slate-900 border border-slate-800 rounded-3xl p-6.5 mt-8 shadow-xl">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-4">
+          <div>
+            <h2 className="text-sm font-black text-slate-200 flex items-center gap-2">
+              <Database className="h-5 w-5 text-indigo-400" />
+              <span>離線數據與同步日誌維護中心 (Data & Sync Maintenance)</span>
+            </h2>
+            <p className="text-[11.5px] text-slate-400 mt-1">
+              手動管理並清除已成功上傳且封存的離線作業日誌佇列，避免瀏覽器儲存空間 (LocalStorage) 長期運作後資料過度累積。
+            </p>
+          </div>
+          
+          <button
+            onClick={() => {
+              if (confirm('確定要手動清除已成功同步的歷史日誌佇列嗎？此動作將釋放 LocalStorage 暫存空間。')) {
+                clearSyncLogs();
+                alert('已成功清除所有同步封存佇列日誌！');
+              }
+            }}
+            disabled={syncLogs.length === 0}
+            className={`px-4.5 py-2.5 rounded-xl text-xs font-black transition-all flex items-center gap-1.5 ${
+              syncLogs.length > 0
+                ? 'bg-rose-600 hover:bg-rose-500 text-white cursor-pointer shadow-lg shadow-rose-600/10'
+                : 'bg-slate-800 text-slate-500 cursor-not-allowed'
+            }`}
+          >
+            <Trash2 className="h-4 w-4" />
+            <span>清理成功同步日誌 ({syncLogs.length} 筆)</span>
+          </button>
+        </div>
+
+        {/* Sync Logs HUD list */}
+        {syncLogs.length > 0 ? (
+          <div className="bg-slate-950 p-4 rounded-2xl border border-slate-850 max-h-48 overflow-y-auto font-mono text-[10.5px] space-y-1.5 divide-y divide-slate-900">
+            {syncLogs.map((log, idx) => (
+              <div key={idx} className="flex justify-between items-center py-2 text-slate-400 first:pt-0">
+                <div className="flex items-center gap-2">
+                  <span className="text-[9.5px] bg-emerald-950 text-emerald-400 border border-emerald-900/30 px-1.5 py-0.5 rounded uppercase font-black">
+                    SUCCESS
+                  </span>
+                  <span className="font-bold text-slate-300">{log.description}</span>
+                </div>
+                <span className="text-slate-500 text-[10px]">{new Date(log.timestamp).toLocaleTimeString()}</span>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="bg-slate-950 p-6 rounded-2xl border border-slate-850/60 text-center text-slate-500 text-xs font-medium">
+            目前暫無任何已封存的離線同步日誌歷史。
+          </div>
+        )}
       </section>
 
       {/* Edit Auditor Modal Window */}

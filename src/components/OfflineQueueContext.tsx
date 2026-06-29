@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { collection, addDoc, doc, updateDoc, onSnapshot, getDocs, setDoc, query, deleteDoc } from 'firebase/firestore';
 import { db } from '../firebase';
-import { MenuItem, CartItem, Order, QueueJob, Tenant } from '../types';
+import { MenuItem, CartItem, Order, QueueJob, Tenant, SyncLogEntry, UserSession, UserRole, UserAccount } from '../types';
 
 interface OfflineQueueContextType {
   isOnline: boolean;
@@ -14,8 +14,14 @@ interface OfflineQueueContextType {
   addOrderToQueue: (order: Order) => Promise<void>;
   updateOrderStatus: (orderId: string, status: Order['status'], tenantId: string) => Promise<void>;
   flagOrder: (orderId: string, isFlagged: boolean, reason: string, tenantId: string) => Promise<void>;
+  setOrderUrgent: (orderId: string, urgent: boolean, tenantId: string) => Promise<void>;
+  clearHistoricalOrders: (tenantId: string) => Promise<void>;
   purgeQueue: () => void;
   forceRetryQueue: () => Promise<void>;
+  
+  // Synchronization logs of processed jobs
+  syncLogs: SyncLogEntry[];
+  clearSyncLogs: () => void;
   
   // Multi-tenant properties & methods
   currentTenantId: string;
@@ -24,6 +30,23 @@ interface OfflineQueueContextType {
   addTenant: (tenant: Tenant) => Promise<void>;
   updateTenant: (tenant: Tenant) => Promise<void>;
   deleteTenant: (tenantId: string) => Promise<void>;
+
+  // Session & User Account Management
+  session: UserSession | null;
+  loginSession: (role: UserRole, branchId: string, pin: string, username?: string) => Promise<boolean>;
+  logoutSession: () => void;
+  users: UserAccount[];
+  addUserAccount: (user: UserAccount) => Promise<void>;
+  deleteUserAccount: (userId: string) => Promise<void>;
+
+  // Centralized Menu Management
+  addMenuItem: (item: MenuItem) => Promise<void>;
+  updateMenuItem: (item: MenuItem) => Promise<void>;
+  deleteMenuItem: (itemId: string) => Promise<void>;
+
+  // KDS View Preference Mode
+  kdsViewMode: 'compact' | 'standard';
+  setKdsViewMode: (mode: 'compact' | 'standard') => void;
 }
 
 const OfflineQueueContext = createContext<OfflineQueueContextType | undefined>(undefined);
@@ -122,7 +145,8 @@ const DEFAULT_TENANTS: Tenant[] = [
     tables: ['Counter-1', 'Table-1', 'Table-2', 'Table-3', 'Table-5'],
     contactNumber: '02-1234-5678',
     address: '台北市大安區忠孝東路四段 100 號',
-    createdAt: '2026-06-27T00:00:00.000Z'
+    createdAt: '2026-06-27T00:00:00.000Z',
+    pin: '111111'
   },
   {
     id: 'EAST_BRANCH',
@@ -133,7 +157,8 @@ const DEFAULT_TENANTS: Tenant[] = [
     tables: ['Table-E1', 'Table-E2', 'Table-E3', 'Table-E4', 'Table-E5'],
     contactNumber: '02-8765-4321',
     address: '台北市信義區松壽路 12 號',
-    createdAt: '2026-06-27T01:00:00.000Z'
+    createdAt: '2026-06-27T01:00:00.000Z',
+    pin: '222222'
   },
   {
     id: 'WEST_BRANCH',
@@ -144,7 +169,8 @@ const DEFAULT_TENANTS: Tenant[] = [
     tables: ['Table-W1', 'Table-W2', 'Table-W3', 'Table-W4', 'Table-W5'],
     contactNumber: '02-2345-6789',
     address: '台北市萬華區武昌街二段 50 號',
-    createdAt: '2026-06-27T02:00:00.000Z'
+    createdAt: '2026-06-27T02:00:00.000Z',
+    pin: '333333'
   }
 ];
 
@@ -171,7 +197,46 @@ export const OfflineQueueProvider: React.FC<{ children: React.ReactNode }> = ({ 
     const saved = localStorage.getItem('local_orders');
     return saved ? JSON.parse(saved) : [];
   });
-  const [menu] = useState<MenuItem[]>(INITIAL_MENU_ITEMS);
+  const [syncLogs, setSyncLogs] = useState<SyncLogEntry[]>(() => {
+    const saved = localStorage.getItem('offline_sync_logs');
+    return saved ? JSON.parse(saved) : [];
+  });
+
+  const [session, setSession] = useState<UserSession | null>(() => {
+    const saved = sessionStorage.getItem('sabay_thai_user_session') || localStorage.getItem('sabay_thai_user_session');
+    return saved ? JSON.parse(saved) : null;
+  });
+
+  const [users, setUsers] = useState<UserAccount[]>(() => {
+    const saved = localStorage.getItem('local_users');
+    return saved ? JSON.parse(saved) : [];
+  });
+
+  const [kdsViewMode, setKdsViewModeState] = useState<'compact' | 'standard'>(() => {
+    const saved = localStorage.getItem('kds_view_mode');
+    return (saved === 'compact' || saved === 'standard') ? saved : 'standard';
+  });
+
+  const setKdsViewMode = (mode: 'compact' | 'standard') => {
+    setKdsViewModeState(mode);
+    localStorage.setItem('kds_view_mode', mode);
+  };
+
+  const [menu, setMenu] = useState<MenuItem[]>(() => {
+    const saved = localStorage.getItem('local_menu_items');
+    if (saved) return JSON.parse(saved);
+    const defaultAssigned = DEFAULT_TENANTS.map(t => t.id);
+    return INITIAL_MENU_ITEMS.map(item => ({
+      ...item,
+      assignedBranches: item.assignedBranches || defaultAssigned
+    }));
+  });
+
+  const clearSyncLogs = () => {
+    setSyncLogs([]);
+    localStorage.removeItem('offline_sync_logs');
+  };
+
   const [activeSyncing, setActiveSyncing] = useState<boolean>(false);
 
   // Monitor hardware network state
@@ -283,6 +348,22 @@ export const OfflineQueueProvider: React.FC<{ children: React.ReactNode }> = ({ 
     return () => unsubscribe();
   }, [isOnline, simulatedOffline]);
 
+  // Real-time listener for users
+  useEffect(() => {
+    const currentEffectiveOnline = isOnline && !simulatedOffline;
+    if (!currentEffectiveOnline) return;
+
+    const unsubscribe = onSnapshot(collection(db, 'users'), (snapshot) => {
+      const items = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as UserAccount));
+      setUsers(items);
+      localStorage.setItem('local_users', JSON.stringify(items));
+    }, (err) => {
+      console.warn('[Firestore] Users subscription failed, using local fallback:', err.message);
+    });
+
+    return () => unsubscribe();
+  }, [isOnline, simulatedOffline]);
+
   const currentEffectiveOnline = isOnline && !simulatedOffline;
 
   // Process the queue in FIFO order
@@ -317,12 +398,47 @@ export const OfflineQueueProvider: React.FC<{ children: React.ReactNode }> = ({ 
           const { orderId, isFlagged, flagReason, tenantId } = job.payload;
           const docRef = doc(db, 'tenants', tenantId, 'orders', orderId);
           await updateDoc(docRef, { isFlagged, flagReason });
+        } else if (job.url.includes('/orders/set-urgent')) {
+          const { orderId, urgent, tenantId } = job.payload;
+          const docRef = doc(db, 'tenants', tenantId, 'orders', orderId);
+          await updateDoc(docRef, { urgent });
+        } else if (job.url.includes('/menu-items/create')) {
+          const item = job.payload;
+          await setDoc(doc(db, 'menu_items', item.id), item);
+        } else if (job.url.includes('/menu-items/update')) {
+          const item = job.payload;
+          await setDoc(doc(db, 'menu_items', item.id), item);
+        } else if (job.url.includes('/menu-items/delete')) {
+          const { id } = job.payload;
+          await deleteDoc(doc(db, 'menu_items', id));
+        } else if (job.url.includes('/users/create')) {
+          const user = job.payload;
+          await setDoc(doc(db, 'users', user.id), user);
+        } else if (job.url.includes('/users/delete')) {
+          const { id } = job.payload;
+          await deleteDoc(doc(db, 'users', id));
         }
 
         // Remove successfully completed job
         tempQueue.shift();
         saveQueueToStorage([...tempQueue]);
         console.log(`[Queue Sync] Job ${job.id} replayed successfully.`);
+
+        // Record successful sync log
+        const logEntry: SyncLogEntry = {
+          id: job.id,
+          timestamp: job.timestamp,
+          url: job.url,
+          method: job.method,
+          description: job.description,
+          syncedAt: new Date().toISOString(),
+          status: 'success'
+        };
+        setSyncLogs(prev => {
+          const updated = [logEntry, ...prev].slice(0, 100);
+          localStorage.setItem('offline_sync_logs', JSON.stringify(updated));
+          return updated;
+        });
       } catch (error) {
         console.error(`[Queue Sync] Failed to replay job ${job.id}:`, error);
         // Pause sync queue execution on failure to maintain FIFO sequence
@@ -466,6 +582,62 @@ export const OfflineQueueProvider: React.FC<{ children: React.ReactNode }> = ({ 
     }
   };
 
+  const setOrderUrgent = async (orderId: string, urgent: boolean, tenantId: string) => {
+    // Optimistic UI
+    const updated = orders.map(o => o.id === orderId ? { ...o, urgent } : o);
+    saveOrdersToStorage(updated);
+
+    if (currentEffectiveOnline) {
+      try {
+        const docRef = doc(db, 'tenants', tenantId, 'orders', orderId);
+        await updateDoc(docRef, { urgent });
+      } catch (error) {
+        console.error('[Firestore] Failed to update urgent state, queueing:', error);
+        const job: QueueJob = {
+          id: Math.random().toString(36).substring(2, 9),
+          timestamp: Date.now(),
+          url: `/orders/set-urgent`,
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          payload: { orderId, urgent, tenantId },
+          description: `標記緊急訂單 ${orderId.substring(0, 5)}...: ${urgent ? 'Urgent' : 'Normal'}`
+        };
+        saveQueueToStorage([...queue, job]);
+      }
+    } else {
+      const job: QueueJob = {
+        id: Math.random().toString(36).substring(2, 9),
+        timestamp: Date.now(),
+        url: `/orders/set-urgent`,
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        payload: { orderId, urgent, tenantId },
+        description: `離線標記緊急訂單 ${orderId.substring(0, 5)}...: ${urgent ? 'Urgent' : 'Normal'}`
+      };
+      saveQueueToStorage([...queue, job]);
+    }
+  };
+
+  const clearHistoricalOrders = async (tenantId: string) => {
+    const completedForTenant = orders.filter(o => o.tenantId === tenantId && o.status === 'completed');
+    const remaining = orders.filter(o => o.tenantId !== tenantId || o.status !== 'completed');
+    saveOrdersToStorage(remaining);
+
+    if (currentEffectiveOnline && completedForTenant.length > 0) {
+      try {
+        await Promise.all(
+          completedForTenant.map(async (order) => {
+            const docRef = doc(db, 'tenants', tenantId, 'orders', order.id);
+            await deleteDoc(docRef);
+          })
+        );
+        console.log(`[Firestore] Cleaned up ${completedForTenant.length} completed orders from cloud DB.`);
+      } catch (err) {
+        console.error('[Firestore] Error cleaning up completed orders from cloud DB:', err);
+      }
+    }
+  };
+
   // 4. Force Purge Queue (Manual Admin override)
   const purgeQueue = () => {
     saveQueueToStorage([]);
@@ -477,27 +649,357 @@ export const OfflineQueueProvider: React.FC<{ children: React.ReactNode }> = ({ 
     await processQueue();
   };
 
+  // Centralized Menu Management
+  const addMenuItem = async (item: MenuItem) => {
+    const updated = [...menu, item];
+    setMenu(updated);
+    localStorage.setItem('local_menu_items', JSON.stringify(updated));
+
+    if (currentEffectiveOnline) {
+      try {
+        await setDoc(doc(db, 'menu_items', item.id), item);
+      } catch (err) {
+        console.error('[Firestore] Failed to add menu item, queueing:', err);
+        const job: QueueJob = {
+          id: Math.random().toString(36).substring(2, 9),
+          timestamp: Date.now(),
+          url: '/menu-items/create',
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          payload: item,
+          description: `新增菜單品項: ${item.name}`
+        };
+        saveQueueToStorage([...queue, job]);
+      }
+    } else {
+      const job: QueueJob = {
+        id: Math.random().toString(36).substring(2, 9),
+        timestamp: Date.now(),
+        url: '/menu-items/create',
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        payload: item,
+        description: `離線新增菜單品項: ${item.name}`
+      };
+      saveQueueToStorage([...queue, job]);
+    }
+  };
+
+  const updateMenuItem = async (item: MenuItem) => {
+    const updated = menu.map(m => m.id === item.id ? item : m);
+    setMenu(updated);
+    localStorage.setItem('local_menu_items', JSON.stringify(updated));
+
+    if (currentEffectiveOnline) {
+      try {
+        await setDoc(doc(db, 'menu_items', item.id), item);
+      } catch (err) {
+        console.error('[Firestore] Failed to update menu item, queueing:', err);
+        const job: QueueJob = {
+          id: Math.random().toString(36).substring(2, 9),
+          timestamp: Date.now(),
+          url: '/menu-items/update',
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          payload: item,
+          description: `編輯菜單品項: ${item.name}`
+        };
+        saveQueueToStorage([...queue, job]);
+      }
+    } else {
+      const job: QueueJob = {
+        id: Math.random().toString(36).substring(2, 9),
+        timestamp: Date.now(),
+        url: '/menu-items/update',
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        payload: item,
+        description: `離線編輯菜單品項: ${item.name}`
+      };
+      saveQueueToStorage([...queue, job]);
+    }
+  };
+
+  const deleteMenuItem = async (itemId: string) => {
+    const updated = menu.filter(m => m.id !== itemId);
+    setMenu(updated);
+    localStorage.setItem('local_menu_items', JSON.stringify(updated));
+
+    if (currentEffectiveOnline) {
+      try {
+        await deleteDoc(doc(db, 'menu_items', itemId));
+      } catch (err) {
+        console.error('[Firestore] Failed to delete menu item, queueing:', err);
+        const job: QueueJob = {
+          id: Math.random().toString(36).substring(2, 9),
+          timestamp: Date.now(),
+          url: '/menu-items/delete',
+          method: 'DELETE',
+          headers: { 'Content-Type': 'application/json' },
+          payload: { id: itemId },
+          description: `刪除菜單品項 ID: ${itemId}`
+        };
+        saveQueueToStorage([...queue, job]);
+      }
+    } else {
+      const job: QueueJob = {
+        id: Math.random().toString(36).substring(2, 9),
+        timestamp: Date.now(),
+        url: '/menu-items/delete',
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        payload: { id: itemId },
+        description: `離線刪除菜單品項 ID: ${itemId}`
+      };
+      saveQueueToStorage([...queue, job]);
+    }
+  };
+
+  // Session Management
+  const loginSession = async (role: UserRole, branchId: string, pin: string, username?: string): Promise<boolean> => {
+    if (role === 'SUPER_ADMIN') {
+      const inputUsername = (username || '').trim().toLowerCase();
+      // 1. Check custom users list first
+      const matchCustom = users.find(u => u.role === 'SUPER_ADMIN' && u.username.toLowerCase() === inputUsername && u.pin === pin);
+      if (matchCustom) {
+        const adminSession: UserSession = {
+          role: 'SUPER_ADMIN',
+          branchId: 'ALL',
+          branchName: 'Super Admin Master Node'
+        };
+        setSession(adminSession);
+        sessionStorage.setItem('sabay_thai_user_session', JSON.stringify(adminSession));
+        localStorage.setItem('sabay_thai_user_session', JSON.stringify(adminSession));
+        return true;
+      }
+
+      // 2. Fallback to default credentials (username: topztar, pin: saved pin / Eur0pe2266)
+      const savedSuperPin = localStorage.getItem('sabay_thai_admin_pin') || 'Eur0pe2266';
+      if ((inputUsername === 'topztar' || inputUsername === 'sabay' || inputUsername === 'admin') && pin === savedSuperPin) {
+        const adminSession: UserSession = {
+          role: 'SUPER_ADMIN',
+          branchId: 'ALL',
+          branchName: 'Super Admin Master Node'
+        };
+        setSession(adminSession);
+        sessionStorage.setItem('sabay_thai_user_session', JSON.stringify(adminSession));
+        localStorage.setItem('sabay_thai_user_session', JSON.stringify(adminSession));
+        return true;
+      }
+      return false;
+    }
+
+    // BRANCH_STAFF login using PIN only (maintaining backward compatibility & user expectations)
+    // 1. Check custom users list first
+    const matchCustom = users.find(u => u.role === 'BRANCH_STAFF' && u.pin === pin && u.tenantId === branchId);
+    if (matchCustom) {
+      const staffSession: UserSession = {
+        role: 'BRANCH_STAFF',
+        branchId: matchCustom.tenantId,
+        branchName: tenants.find(t => t.id === matchCustom.tenantId)?.name || '分店人員'
+      };
+      setSession(staffSession);
+      sessionStorage.setItem('sabay_thai_user_session', JSON.stringify(staffSession));
+      localStorage.setItem('sabay_thai_user_session', JSON.stringify(staffSession));
+      setCurrentTenantId(matchCustom.tenantId);
+      return true;
+    }
+
+    // 2. Fallback to default credentials
+    const branch = tenants.find(t => t.id === branchId);
+    if (branch) {
+      const expectedPin = branch.pin || (branch.id === 'DEFAULT' ? '111111' : branch.id === 'EAST_BRANCH' ? '222222' : '333333');
+      if (pin === expectedPin) {
+        const staffSession: UserSession = {
+          role: 'BRANCH_STAFF',
+          branchId: branch.id,
+          branchName: branch.name
+        };
+        setSession(staffSession);
+        sessionStorage.setItem('sabay_thai_user_session', JSON.stringify(staffSession));
+        localStorage.setItem('sabay_thai_user_session', JSON.stringify(staffSession));
+        setCurrentTenantId(branch.id);
+        return true;
+      }
+    }
+    return false;
+  };
+
+  const logoutSession = () => {
+    setSession(null);
+    sessionStorage.removeItem('sabay_thai_user_session');
+    localStorage.removeItem('sabay_thai_user_session');
+  };
+
+  const addUserAccount = async (user: UserAccount) => {
+    const updated = [...users, user];
+    setUsers(updated);
+    localStorage.setItem('local_users', JSON.stringify(updated));
+
+    if (isOnline && !simulatedOffline) {
+      try {
+        await setDoc(doc(db, 'users', user.id), user);
+      } catch (err) {
+        console.error('[Firestore] Failed to add user, queueing instead:', err);
+        const job: QueueJob = {
+          id: Math.random().toString(36).substring(2, 9),
+          timestamp: Date.now(),
+          url: '/users/create',
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          payload: user,
+          description: `建立使用者帳號: ${user.username} (${user.role})`
+        };
+        saveQueueToStorage([...queue, job]);
+      }
+    } else {
+      const job: QueueJob = {
+        id: Math.random().toString(36).substring(2, 9),
+        timestamp: Date.now(),
+        url: '/users/create',
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        payload: user,
+        description: `離線建立使用者帳號: ${user.username} (${user.role})`
+      };
+      saveQueueToStorage([...queue, job]);
+    }
+  };
+
+  const deleteUserAccount = async (userId: string) => {
+    const targetUser = users.find(u => u.id === userId);
+    const updated = users.filter(u => u.id !== userId);
+    setUsers(updated);
+    localStorage.setItem('local_users', JSON.stringify(updated));
+
+    if (isOnline && !simulatedOffline) {
+      try {
+        await deleteDoc(doc(db, 'users', userId));
+      } catch (err) {
+        console.error('[Firestore] Failed to delete user, queueing instead:', err);
+        const job: QueueJob = {
+          id: Math.random().toString(36).substring(2, 9),
+          timestamp: Date.now(),
+          url: '/users/delete',
+          method: 'DELETE',
+          headers: { 'Content-Type': 'application/json' },
+          payload: { id: userId },
+          description: `刪除使用者帳號: ${targetUser?.username || userId}`
+        };
+        saveQueueToStorage([...queue, job]);
+      }
+    } else {
+      const job: QueueJob = {
+        id: Math.random().toString(36).substring(2, 9),
+        timestamp: Date.now(),
+        url: '/users/delete',
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        payload: { id: userId },
+        description: `離線刪除使用者帳號: ${targetUser?.username || userId}`
+      };
+      saveQueueToStorage([...queue, job]);
+    }
+  };
+
+  // Real-time listener for menu_items when online
+  useEffect(() => {
+    if (!currentEffectiveOnline) return;
+
+    const unsubscribe = onSnapshot(collection(db, 'menu_items'), (snapshot) => {
+      if (snapshot.empty) {
+        // Seed menu items if empty on Firestore
+        const defaultAssigned = DEFAULT_TENANTS.map(t => t.id);
+        INITIAL_MENU_ITEMS.forEach(async (item) => {
+          const seededItem = {
+            ...item,
+            assignedBranches: item.assignedBranches || defaultAssigned
+          };
+          await setDoc(doc(db, 'menu_items', item.id), seededItem);
+        });
+        return;
+      }
+
+      const items = snapshot.docs.map(doc => {
+        const data = doc.data();
+        return {
+          id: doc.id,
+          ...data,
+          assignedBranches: data.assignedBranches || DEFAULT_TENANTS.map(t => t.id)
+        } as MenuItem;
+      });
+      setMenu(items);
+      localStorage.setItem('local_menu_items', JSON.stringify(items));
+    }, (err) => {
+      console.warn('[Firestore] Menu subscription failed, using local fallback:', err.message);
+    });
+
+    return () => unsubscribe();
+  }, [currentEffectiveOnline]);
+
+  // Safe filtering: Branch staff can ONLY access orders belonging to their verified branch
+  const filteredOrders = React.useMemo(() => {
+    if (session?.role === 'BRANCH_STAFF') {
+      return orders.filter(o => o.tenantId === session.branchId);
+    }
+    return orders;
+  }, [orders, session]);
+
   // Firestore Real-time listener when online
   useEffect(() => {
     if (!currentEffectiveOnline) return;
 
-    // Listen to orders collection under the dynamically selected tenant
-    const unsubscribe = onSnapshot(collection(db, 'tenants', currentTenantId, 'orders'), (snapshot) => {
+    // Force listener to target authenticated branch if BRANCH_STAFF to guarantee absolute data isolation
+    const activeListenerTenantId = session?.role === 'BRANCH_STAFF' ? session.branchId : currentTenantId;
+
+    const unsubscribe = onSnapshot(collection(db, 'tenants', activeListenerTenantId, 'orders'), (snapshot) => {
       const items = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Order));
       
-      // Merge live firestore orders with any locally unsynced orders to prevent state flicker
       setOrders(prev => {
-        const localOnly = prev.filter(p => !items.some(item => item.id === p.id));
-        const merged = [...localOnly, ...items].sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+        // Keep unsynced local orders of other tenants untouched, only merge live orders for the active tenant
+        const otherTenantsOrders = prev.filter(p => p.tenantId !== activeListenerTenantId);
+        const currentTenantLocalOnly = prev.filter(p => p.tenantId === activeListenerTenantId && !items.some(item => item.id === p.id));
+        const merged = [...otherTenantsOrders, ...currentTenantLocalOnly, ...items].sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
         localStorage.setItem('local_orders', JSON.stringify(merged));
         return merged;
       });
     }, (err) => {
-      console.warn(`[Firestore] Real-time stream failed for tenant ${currentTenantId}, using offline fallback. Error:`, err.message);
+      console.warn(`[Firestore] Real-time stream failed for tenant ${activeListenerTenantId}, using offline fallback. Error:`, err.message);
     });
 
     return () => unsubscribe();
-  }, [currentEffectiveOnline, currentTenantId]);
+  }, [currentEffectiveOnline, currentTenantId, session]);
+
+  // Real-time Heartbeat mechanism for tracking Tenant connection status
+  useEffect(() => {
+    if (!currentEffectiveOnline) return;
+
+    const activeTenantId = session?.role === 'BRANCH_STAFF' ? session.branchId : currentTenantId;
+    if (!activeTenantId || activeTenantId === 'DEFAULT') return;
+
+    const updateHeartbeat = async () => {
+      const tenant = tenants.find(t => t.id === activeTenantId);
+      if (!tenant) return;
+
+      const now = new Date().toISOString();
+      if (tenant.lastHeartbeat) {
+        const lastTime = new Date(tenant.lastHeartbeat).getTime();
+        if (Date.now() - lastTime < 30 * 1000) return;
+      }
+
+      const updated = { ...tenant, lastHeartbeat: now };
+      try {
+        await setDoc(doc(db, 'tenants', activeTenantId), updated);
+      } catch (err) {
+        console.warn('[Heartbeat] Failed to set heartbeat:', err);
+      }
+    };
+
+    updateHeartbeat();
+    const interval = setInterval(updateHeartbeat, 45000);
+
+    return () => clearInterval(interval);
+  }, [currentEffectiveOnline, currentTenantId, session, tenants]);
 
   return (
     <OfflineQueueContext.Provider value={{
@@ -505,20 +1007,35 @@ export const OfflineQueueProvider: React.FC<{ children: React.ReactNode }> = ({ 
       simulatedOffline,
       setSimulatedOffline,
       queue,
-      orders,
+      orders: filteredOrders, // Expose isolated orders securely
       menu,
       setOrders,
       addOrderToQueue,
       updateOrderStatus,
       flagOrder,
+      setOrderUrgent,
+      clearHistoricalOrders,
       purgeQueue,
       forceRetryQueue,
+      syncLogs,
+      clearSyncLogs,
       currentTenantId,
       setCurrentTenantId,
       tenants,
       addTenant,
       updateTenant,
-      deleteTenant
+      deleteTenant,
+      session,
+      loginSession,
+      logoutSession,
+      users,
+      addUserAccount,
+      deleteUserAccount,
+      addMenuItem,
+      updateMenuItem,
+      deleteMenuItem,
+      kdsViewMode,
+      setKdsViewMode
     }}>
       {children}
     </OfflineQueueContext.Provider>
