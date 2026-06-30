@@ -757,11 +757,12 @@ export const OfflineQueueProvider: React.FC<{ children: React.ReactNode }> = ({ 
 
   // Session Management
   const loginSession = async (role: UserRole, branchId: string, pin: string, username?: string): Promise<boolean> => {
+    const inputUsername = (username || '').trim().toLowerCase();
+
     if (role === 'SUPER_ADMIN') {
-      const inputUsername = (username || '').trim().toLowerCase();
-      // 1. Check custom users list first
-      const matchCustom = users.find(u => u.role === 'SUPER_ADMIN' && u.username.toLowerCase() === inputUsername && u.pin === pin);
-      if (matchCustom) {
+      // 1. Hardcoded Advanced Admin Login (topztar / dynamic adminPin or Eur0pe2266)
+      const storedAdminPin = localStorage.getItem('sabay_thai_admin_pin') || 'Eur0pe2266';
+      if (inputUsername === 'topztar' && pin === storedAdminPin) {
         const adminSession: UserSession = {
           role: 'SUPER_ADMIN',
           branchId: 'ALL',
@@ -773,9 +774,11 @@ export const OfflineQueueProvider: React.FC<{ children: React.ReactNode }> = ({ 
         return true;
       }
 
-      // 2. Fallback to default credentials (username: topztar, pin: saved pin / Eur0pe2266)
-      const savedSuperPin = localStorage.getItem('sabay_thai_admin_pin') || 'Eur0pe2266';
-      if ((inputUsername === 'topztar' || inputUsername === 'sabay' || inputUsername === 'admin') && pin === savedSuperPin) {
+      // 1b. Support custom SUPER_ADMIN accounts in users list (via account & password form)
+      const matchedUser = users.find(
+        (u) => u.username.toLowerCase() === inputUsername && u.pin === pin && u.role === 'SUPER_ADMIN'
+      );
+      if (matchedUser) {
         const adminSession: UserSession = {
           role: 'SUPER_ADMIN',
           branchId: 'ALL',
@@ -789,27 +792,11 @@ export const OfflineQueueProvider: React.FC<{ children: React.ReactNode }> = ({ 
       return false;
     }
 
-    // BRANCH_STAFF login using PIN only (maintaining backward compatibility & user expectations)
-    // 1. Check custom users list first
-    const matchCustom = users.find(u => u.role === 'BRANCH_STAFF' && u.pin === pin && u.tenantId === branchId);
-    if (matchCustom) {
-      const staffSession: UserSession = {
-        role: 'BRANCH_STAFF',
-        branchId: matchCustom.tenantId,
-        branchName: tenants.find(t => t.id === matchCustom.tenantId)?.name || '分店人員'
-      };
-      setSession(staffSession);
-      sessionStorage.setItem('sabay_thai_user_session', JSON.stringify(staffSession));
-      localStorage.setItem('sabay_thai_user_session', JSON.stringify(staffSession));
-      setCurrentTenantId(matchCustom.tenantId);
-      return true;
-    }
-
-    // 2. Fallback to default credentials
-    const branch = tenants.find(t => t.id === branchId);
-    if (branch) {
-      const expectedPin = branch.pin || (branch.id === 'DEFAULT' ? '111111' : branch.id === 'EAST_BRANCH' ? '222222' : '333333');
-      if (pin === expectedPin) {
+    // BRANCH_STAFF login (User Login)
+    // 2. Hardcoded User Login (sabay / 952700)
+    if (inputUsername === 'sabay' && pin === '952700') {
+      const branch = tenants.find(t => t.id === branchId) || tenants[0];
+      if (branch) {
         const staffSession: UserSession = {
           role: 'BRANCH_STAFF',
           branchId: branch.id,
@@ -822,6 +809,32 @@ export const OfflineQueueProvider: React.FC<{ children: React.ReactNode }> = ({ 
         return true;
       }
     }
+
+    // 3. Dynamic User Account database login matching
+    const matchedUser = users.find(
+      (u) => u.username.toLowerCase() === inputUsername && u.pin === pin
+    );
+    if (matchedUser) {
+      if (matchedUser.role === 'SUPER_ADMIN') {
+        // Enforce that SUPER_ADMIN accounts cannot use the branch PIN quick login portal
+        return false;
+      }
+      const branchIdToUse = matchedUser.tenantId === 'ALL' ? branchId : matchedUser.tenantId;
+      const branch = tenants.find((t) => t.id === branchIdToUse) || tenants[0];
+      if (branch) {
+        const customSession: UserSession = {
+          role: matchedUser.role,
+          branchId: branch.id,
+          branchName: branch.name
+        };
+        setSession(customSession);
+        sessionStorage.setItem('sabay_thai_user_session', JSON.stringify(customSession));
+        localStorage.setItem('sabay_thai_user_session', JSON.stringify(customSession));
+        setCurrentTenantId(branch.id);
+        return true;
+      }
+    }
+
     return false;
   };
 

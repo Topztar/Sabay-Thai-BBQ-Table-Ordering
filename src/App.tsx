@@ -26,13 +26,14 @@ import {
   Sparkles,
   Check,
   AlertTriangle,
-  Users
+  Users,
+  X
 } from 'lucide-react';
 
 type AdminViewMode = 'kds' | 'manager' | 'tenant-admin' | 'central-menu' | 'user-management';
 
 function PinGate({ onSuccess }: { onSuccess: () => void }) {
-  const { tenants, loginSession } = useOfflineQueue();
+  const { tenants, loginSession, users } = useOfflineQueue();
   const [role, setRole] = useState<UserRole>('SUPER_ADMIN');
   const [selectedBranchId, setSelectedBranchId] = useState<string>('DEFAULT');
   const [pin, setPin] = useState<string>('');
@@ -42,6 +43,22 @@ function PinGate({ onSuccess }: { onSuccess: () => void }) {
   const [isVerifying, setIsVerifying] = useState<boolean>(false);
   const [failedCount, setFailedCount] = useState<number>(0);
   const [lockoutTime, setLockoutTime] = useState<number>(0);
+  const [isCooldown, setIsCooldown] = useState<boolean>(false);
+  const [showForgotPinHelp, setShowForgotPinHelp] = useState<boolean>(false);
+
+  // Keep track of unlocked branches on this device
+  const [unlockedBranches, setUnlockedBranches] = useState<string[]>(() => {
+    try {
+      const stored = sessionStorage.getItem('sabay_unlocked_branches');
+      return stored ? JSON.parse(stored) : [];
+    } catch {
+      return [];
+    }
+  });
+
+  // Branch level full login input state (Step 1)
+  const [branchAccount, setBranchAccount] = useState<string>('sabay');
+  const [branchPassword, setBranchPassword] = useState<string>('');
 
   // Set default selected branch when tenants load
   useEffect(() => {
@@ -67,11 +84,19 @@ function PinGate({ onSuccess }: { onSuccess: () => void }) {
     return () => clearInterval(timer);
   }, [lockoutTime]);
 
-  const isDisabled = isVerifying || lockoutTime > 0;
+  const isDisabled = isVerifying || lockoutTime > 0 || isCooldown;
+
+  const triggerCooldown = () => {
+    setIsCooldown(true);
+    setTimeout(() => {
+      setIsCooldown(false);
+    }, 100);
+  };
 
   const handleKeyPress = async (num: string) => {
     if (isDisabled) return;
     setError('');
+    triggerCooldown();
     
     if (pin.length < 6) {
       const newPin = pin + num;
@@ -79,7 +104,7 @@ function PinGate({ onSuccess }: { onSuccess: () => void }) {
       
       if (newPin.length === 6) {
         setIsVerifying(true);
-        const success = await loginSession(role, selectedBranchId, newPin);
+        const success = await loginSession(role, selectedBranchId, newPin, adminUsername);
         
         if (success) {
           setTimeout(() => {
@@ -100,7 +125,7 @@ function PinGate({ onSuccess }: { onSuccess: () => void }) {
             } else {
               setError(`密碼錯誤，請重新輸入 (剩餘嘗試次數: ${3 - nextFailed})`);
             }
-          }, 400); // Allow brief visual delay of filled dots before clearing
+          }, 400);
         }
       }
     }
@@ -109,12 +134,14 @@ function PinGate({ onSuccess }: { onSuccess: () => void }) {
   const handleBackspace = () => {
     if (isDisabled) return;
     setError('');
+    triggerCooldown();
     setPin(prev => prev.slice(0, -1));
   };
 
   const handleClear = () => {
     if (isDisabled) return;
     setError('');
+    triggerCooldown();
     setPin('');
   };
 
@@ -157,13 +184,57 @@ function PinGate({ onSuccess }: { onSuccess: () => void }) {
     }
   };
 
-  return (
-    <div className="min-h-screen bg-slate-950 flex flex-col justify-center items-center px-4 py-12 relative overflow-hidden font-sans antialiased">
-      {/* Decorative background glows */}
-      <div className="absolute top-1/4 left-1/2 -translate-x-1/2 -translate-y-1/2 w-80 h-80 bg-indigo-600/10 rounded-full blur-3xl pointer-events-none" />
-      <div className="absolute bottom-1/4 left-1/2 -translate-x-1/2 translate-y-1/2 w-80 h-80 bg-purple-600/10 rounded-full blur-3xl pointer-events-none" />
+  const handleBranchUnlock = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (isDisabled) return;
+    setError('');
 
-      <div className="w-full max-w-md bg-slate-900/85 backdrop-blur-xl border border-slate-800/80 rounded-3xl p-8 shadow-2xl relative z-10 flex flex-col items-center">
+    const accountInput = branchAccount.trim();
+    const passwordInput = branchPassword.trim();
+
+    if (!accountInput) {
+      setError('請輸入分店登入帳號！');
+      return;
+    }
+    if (!passwordInput) {
+      setError('請輸入分店安全密碼！');
+      return;
+    }
+
+    // 1. Default system-wide fallback/development branch account
+    const isValidDefault = (accountInput.toLowerCase() === 'sabay' && passwordInput === '952700');
+
+    // 2. Branch-specific tenant PIN code (e.g. 111111 for DEFAULT) matching
+    const currentTenant = tenants.find(t => t.id === selectedBranchId);
+    const tenantPin = currentTenant?.pin || (selectedBranchId === 'DEFAULT' ? '111111' : selectedBranchId === 'EAST_BRANCH' ? '222222' : '333333');
+    const isValidTenantPin = (accountInput.toLowerCase() === 'sabay' || accountInput.toLowerCase() === selectedBranchId.toLowerCase()) && passwordInput === tenantPin;
+
+    // 3. Dynamic branch staff user accounts
+    const isValidCustomUser = users?.some(u => 
+      u.username.toLowerCase() === accountInput.toLowerCase() && 
+      u.pin === passwordInput && 
+      u.role === 'BRANCH_STAFF' &&
+      (u.tenantId === 'ALL' || u.tenantId === selectedBranchId)
+    );
+
+    if (isValidDefault || isValidTenantPin || isValidCustomUser) {
+      const nextUnlocked = [...unlockedBranches, selectedBranchId];
+      setUnlockedBranches(nextUnlocked);
+      sessionStorage.setItem('sabay_unlocked_branches', JSON.stringify(nextUnlocked));
+      setBranchPassword('');
+      setError('');
+    } else {
+      setError('分店帳號或安全密碼錯誤，請重新輸入！');
+    }
+  };
+
+  return (
+    <div className={`min-h-screen ${role === 'SUPER_ADMIN' ? 'bg-slate-950' : 'bg-emerald-950/20'} flex flex-col justify-center items-center px-4 py-12 relative overflow-hidden font-sans antialiased transition-colors duration-700`}>
+      {/* Decorative background glows */}
+      <div className={`absolute top-1/4 left-1/2 -translate-x-1/2 -translate-y-1/2 w-80 h-80 ${role === 'SUPER_ADMIN' ? 'bg-indigo-600/10' : 'bg-emerald-600/10'} rounded-full blur-3xl pointer-events-none transition-colors duration-700`} />
+      <div className={`absolute bottom-1/4 left-1/2 -translate-x-1/2 translate-y-1/2 w-80 h-80 ${role === 'SUPER_ADMIN' ? 'bg-purple-600/10' : 'bg-teal-600/10'} rounded-full blur-3xl pointer-events-none transition-colors duration-700`} />
+
+      <div className={`w-full max-w-md ${role === 'SUPER_ADMIN' ? 'bg-slate-900/85 border-slate-800/80' : 'bg-emerald-900/10 border-emerald-800/30'} backdrop-blur-xl border rounded-3xl p-8 shadow-2xl relative z-10 flex flex-col items-center transition-all duration-700`}>
         {/* Header Section */}
         <div className="flex flex-col items-center text-center mb-6">
           {lockoutTime > 0 ? (
@@ -197,25 +268,23 @@ function PinGate({ onSuccess }: { onSuccess: () => void }) {
               </div>
             </div>
           ) : (
-            <div className="bg-gradient-to-tr from-indigo-600 to-purple-600 p-3.5 rounded-2xl text-white shadow-xl shadow-indigo-500/10 mb-4 animate-pulse">
-              <Lock className="h-6 w-6" />
+            <div className={`${role === 'SUPER_ADMIN' ? 'bg-gradient-to-tr from-indigo-600 to-purple-600 shadow-indigo-500/10' : 'bg-gradient-to-tr from-emerald-600 to-teal-600 shadow-emerald-500/10'} p-3.5 rounded-2xl text-white shadow-xl mb-4 animate-pulse transition-all duration-700`}>
+              {role === 'SUPER_ADMIN' ? <Shield className="h-7 w-7" /> : <Users className="h-7 w-7" />}
             </div>
           )}
-          <h2 className="text-lg font-black tracking-wider text-white">安全身分驗證</h2>
-          <p className="text-slate-400 text-[11px] mt-1.5 font-bold">
-            {lockoutTime > 0 
-              ? '系統鎖定中，請稍候' 
-              : role === 'SUPER_ADMIN' 
-                ? '高級管理員登入請輸入帳號與密碼' 
-                : '使用者登入請選取駐點分店並輸入 6 位數安全 PIN 碼'}
+          <h2 className="text-xl font-black text-white tracking-tight mb-1">
+            {role === 'SUPER_ADMIN' ? '高級管理員登入' : '使用者登入'}
+          </h2>
+          <p className="text-[10px] text-slate-500 font-bold uppercase tracking-[0.2em]">
+            {role === 'SUPER_ADMIN' ? 'Advanced Admin Authentication' : 'Staff Access Portal'}
           </p>
         </div>
 
-        {/* Role Select Options */}
-        <div className="flex gap-3.5 w-full mb-5">
+        {/* Tab Switcher */}
+        <div className="flex w-full gap-2 p-1 bg-slate-950/50 rounded-2xl border border-slate-800/50 mb-8">
           <button
             type="button"
-            onClick={() => { setRole('SUPER_ADMIN'); setPin(''); setError(''); setAdminUsername(''); setAdminPassword(''); }}
+            onClick={() => { setRole('SUPER_ADMIN'); setPin(''); setError(''); }}
             disabled={isDisabled}
             className={`flex-1 py-3.5 rounded-2xl border text-[11px] font-black transition-all flex flex-col items-center gap-1.5 cursor-pointer ${
               role === 'SUPER_ADMIN'
@@ -228,22 +297,21 @@ function PinGate({ onSuccess }: { onSuccess: () => void }) {
           </button>
           <button
             type="button"
-            onClick={() => { setRole('BRANCH_STAFF'); setPin(''); setError(''); }}
+            onClick={() => { setRole('BRANCH_STAFF'); setPin(''); setAdminUsername(''); setError(''); }}
             disabled={isDisabled}
             className={`flex-1 py-3.5 rounded-2xl border text-[11px] font-black transition-all flex flex-col items-center gap-1.5 cursor-pointer ${
               role === 'BRANCH_STAFF'
-                ? 'bg-purple-600/20 border-purple-500/50 text-purple-300 shadow-inner'
+                ? 'bg-emerald-600/20 border-emerald-500/50 text-emerald-300 shadow-inner'
                 : 'bg-slate-950/40 border-slate-850 text-slate-500 hover:text-slate-300 hover:border-slate-800'
             }`}
           >
-            <Building className="h-4.5 w-4.5" />
+            <Users className="h-4.5 w-4.5" />
             <span>使用者登入</span>
           </button>
         </div>
 
-        {/* Dynamic Forms / Input areas based on role selection */}
+        {/* Dynamic Forms */}
         {role === 'SUPER_ADMIN' ? (
-          /* SUPER ADMIN: Account & Password input layout */
           <form onSubmit={handleAdminSubmit} className="w-full space-y-4 mb-5">
             <div>
               <label className="block text-[10px] text-slate-500 font-black mb-1.5 uppercase tracking-wider">高級管理員帳號 (Account)</label>
@@ -269,7 +337,6 @@ function PinGate({ onSuccess }: { onSuccess: () => void }) {
               />
             </div>
 
-            {/* Error Notification / Cooldown info */}
             <div className="h-8 flex items-center justify-center text-center">
               {lockoutTime > 0 ? (
                 <div className="flex items-center gap-2 text-[11px] text-amber-400 font-extrabold bg-amber-500/10 border border-amber-500/20 px-4 py-1 rounded-full">
@@ -284,7 +351,7 @@ function PinGate({ onSuccess }: { onSuccess: () => void }) {
               ) : (
                 <div className="flex items-center gap-1 text-[10px] text-slate-500 font-mono">
                   <KeyRound className="h-3 w-3" />
-                  <span>請輸入帳號 topztar 及密碼</span>
+                  <span>請輸入管理員帳密進行授權</span>
                 </div>
               )}
             </div>
@@ -308,18 +375,34 @@ function PinGate({ onSuccess }: { onSuccess: () => void }) {
                 </>
               )}
             </button>
+
+            <div className="flex justify-center pt-2">
+              <button
+                type="button"
+                onClick={() => setShowForgotPinHelp(true)}
+                className="text-[11px] font-bold text-slate-500 hover:text-indigo-400 hover:underline transition-colors duration-200 cursor-pointer"
+              >
+                忘記帳密？ / Forgot Credentials?
+              </button>
+            </div>
           </form>
-        ) : (
-          /* BRANCH STAFF: Branch Dropdown & 6-dot bullet indicators with numeric tactile keypad layout */
-          <>
-            {/* Branch Select Dropdown */}
-            <div className="w-full mb-5 animate-fade-in">
+        ) : !unlockedBranches.includes(selectedBranchId) ? (
+          <form onSubmit={handleBranchUnlock} className="w-full space-y-4 mb-5">
+            <div className="bg-amber-500/10 border border-amber-500/20 rounded-2xl p-4.5 text-xs text-amber-400 space-y-1 text-center mb-2">
+              <AlertTriangle className="h-5 w-5 text-amber-500 mx-auto mb-1 animate-pulse" />
+              <h4 className="font-extrabold text-[11px] uppercase tracking-wide">此分店裝置尚未啟用授權</h4>
+              <p className="leading-relaxed text-[10.5px] text-slate-400">
+                本系統安全機制要求：分店必須先登入帳號及密碼進行裝置啟用，後續才能使用 6 位數 PIN 碼進行快速登入。
+              </p>
+            </div>
+
+            <div className="w-full">
               <label className="block text-[10px] text-slate-500 font-black mb-1.5 uppercase tracking-wider">選擇駐點店別 (Branch Target)</label>
               <select
                 value={selectedBranchId}
                 onChange={(e) => { setSelectedBranchId(e.target.value); setPin(''); setError(''); }}
                 disabled={isDisabled}
-                className="w-full bg-slate-950 border border-slate-800 text-xs font-black text-white rounded-xl py-2.5 px-3 focus:outline-none focus:border-indigo-500"
+                className="w-full bg-slate-950 border border-slate-800 text-xs font-black text-white rounded-xl py-2.5 px-3 focus:outline-none focus:border-emerald-500"
               >
                 {tenants.map(t => (
                   <option key={t.id} value={t.id}>{t.name}</option>
@@ -327,7 +410,102 @@ function PinGate({ onSuccess }: { onSuccess: () => void }) {
               </select>
             </div>
 
-            {/* Bullet Pin Indicators */}
+            <div>
+              <label className="block text-[10px] text-slate-500 font-black mb-1.5 uppercase tracking-wider">分店登入帳號 (Branch Account)</label>
+              <input
+                type="text"
+                value={branchAccount}
+                onChange={(e) => { setError(''); setBranchAccount(e.target.value); }}
+                disabled={isDisabled}
+                placeholder="預設為 sabay"
+                className="w-full bg-slate-950 border border-slate-850 text-xs text-white font-medium rounded-xl py-3 px-4 focus:outline-none focus:border-emerald-500/80 transition-all placeholder-slate-700"
+              />
+            </div>
+
+            <div>
+              <label className="block text-[10px] text-slate-500 font-black mb-1.5 uppercase tracking-wider">分店安全密碼 (Branch Password)</label>
+              <input
+                type="password"
+                value={branchPassword}
+                onChange={(e) => { setError(''); setBranchPassword(e.target.value); }}
+                disabled={isDisabled}
+                placeholder="請輸入分店安全管理密碼"
+                className="w-full bg-slate-950 border border-slate-850 text-xs text-white font-medium rounded-xl py-3 px-4 focus:outline-none focus:border-emerald-500/80 transition-all placeholder-slate-700"
+              />
+            </div>
+
+            <div className="h-8 flex items-center justify-center text-center">
+              {error ? (
+                <div className="flex items-center gap-1.5 text-[11px] text-red-400 font-extrabold bg-red-500/10 border border-red-500/20 px-3.5 py-1 rounded-full">
+                  <AlertCircle className="h-3.5 w-3.5" />
+                  <span>{error}</span>
+                </div>
+              ) : (
+                <div className="flex items-center gap-1 text-[10px] text-slate-500 font-mono">
+                  <Lock className="h-3 w-3" />
+                  <span>登入完成後將啟用 6 位數 PIN 快速登入</span>
+                </div>
+              )}
+            </div>
+
+            <button
+              type="submit"
+              disabled={isDisabled}
+              className="w-full py-3 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-black text-xs rounded-xl shadow-lg transition-all flex items-center justify-center gap-1.5 cursor-pointer"
+            >
+              <Check className="h-3.5 w-3.5" />
+              <span>啟用分店快速登入 (Activate)</span>
+            </button>
+          </form>
+        ) : (
+          <div className="w-full flex flex-col items-center">
+            <div className="w-full mb-3 flex items-center justify-between gap-2">
+              <span className="text-[10px] text-emerald-400 font-black uppercase tracking-wider flex items-center gap-1">
+                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse inline-block" />
+                <span>分店裝置已啟用授權</span>
+              </span>
+              <button
+                type="button"
+                onClick={() => {
+                  const nextUnlocked = unlockedBranches.filter(id => id !== selectedBranchId);
+                  setUnlockedBranches(nextUnlocked);
+                  sessionStorage.setItem('sabay_unlocked_branches', JSON.stringify(nextUnlocked));
+                  setPin('');
+                  setError('');
+                }}
+                className="text-[10px] font-bold text-rose-400 hover:text-rose-300 flex items-center gap-1 cursor-pointer hover:underline"
+              >
+                <Lock className="h-3 w-3" />
+                <span>安全鎖定裝置</span>
+              </button>
+            </div>
+
+            <div className="w-full mb-4">
+              <label className="block text-[10px] text-slate-500 font-black mb-1.5 uppercase tracking-wider">選擇駐點店別 (Branch Target)</label>
+              <select
+                value={selectedBranchId}
+                onChange={(e) => { setSelectedBranchId(e.target.value); setPin(''); setError(''); }}
+                disabled={isDisabled}
+                className="w-full bg-slate-950 border border-slate-800 text-xs font-black text-white rounded-xl py-2.5 px-3 focus:outline-none focus:border-emerald-500"
+              >
+                {tenants.map(t => (
+                  <option key={t.id} value={t.id}>{t.name}</option>
+                ))}
+              </select>
+            </div>
+
+            <div className="w-full mb-5">
+              <label className="block text-[10px] text-slate-500 font-black mb-1.5 uppercase tracking-wider">使用者帳號 (Account)</label>
+              <input
+                type="text"
+                value={adminUsername}
+                onChange={(e) => { setError(''); setAdminUsername(e.target.value); }}
+                disabled={isDisabled}
+                placeholder="預設為 sabay"
+                className="w-full bg-slate-950 border border-slate-850 text-xs text-white font-medium rounded-xl py-3 px-4 focus:outline-none focus:border-emerald-500/80 transition-all placeholder-slate-700"
+              />
+            </div>
+
             <div className="flex justify-center gap-3.5 mb-5">
               {[...Array(6)].map((_, i) => (
                 <div
@@ -336,19 +514,18 @@ function PinGate({ onSuccess }: { onSuccess: () => void }) {
                     lockoutTime > 0
                       ? 'bg-slate-800 border-slate-700/60'
                       : i < pin.length
-                        ? 'bg-indigo-500 border-indigo-400 shadow-lg shadow-indigo-500/50 scale-110'
+                        ? 'bg-emerald-500 border-emerald-400 shadow-lg shadow-emerald-500/50 scale-110'
                         : 'bg-slate-950 border-slate-800'
                   }`}
                 />
               ))}
             </div>
 
-            {/* Error Notification / Cooldown info */}
             <div className="h-8 mb-4 flex items-center justify-center text-center">
               {lockoutTime > 0 ? (
                 <div className="flex items-center gap-2 text-[11px] text-amber-400 font-extrabold bg-amber-500/10 border border-amber-500/20 px-4 py-1 rounded-full">
                   <span className="animate-spin h-3 w-3 border-2 border-amber-400 border-t-transparent rounded-full" />
-                  <span>鎖定中！請等待 {lockoutTime} 秒後再試</span>
+                  <span>鎖定中！請等待 {lockoutTime} 秒</span>
                 </div>
               ) : error ? (
                 <div className="flex items-center gap-1.5 text-[11px] text-red-400 font-extrabold bg-red-500/10 border border-red-500/20 px-3.5 py-1 rounded-full">
@@ -358,14 +535,11 @@ function PinGate({ onSuccess }: { onSuccess: () => void }) {
               ) : (
                 <div className="flex items-center gap-1 text-[10px] text-slate-500 font-mono">
                   <KeyRound className="h-3 w-3" />
-                  <span>
-                    店員預設：{selectedBranchId === 'DEFAULT' ? '111111' : selectedBranchId === 'EAST_BRANCH' ? '222222' : '333333'}
-                  </span>
+                  <span>請輸入帳號與 6 位數 PIN 碼</span>
                 </div>
               )}
             </div>
 
-            {/* tactile numpad grid */}
             <div className="grid grid-cols-3 gap-3 w-full max-w-xs mb-6">
               {['1', '2', '3', '4', '5', '6', '7', '8', '9'].map((num) => (
                 <button
@@ -375,7 +549,7 @@ function PinGate({ onSuccess }: { onSuccess: () => void }) {
                   className={`h-14 rounded-2xl bg-slate-950/40 border border-slate-850 text-white font-black text-lg transition-all flex items-center justify-center select-none ${
                     isDisabled
                       ? 'opacity-25 cursor-not-allowed bg-slate-950/10'
-                      : 'hover:bg-slate-800/80 active:bg-slate-700/80 cursor-pointer'
+                      : 'hover:bg-emerald-900/40 active:bg-emerald-800/60 cursor-pointer'
                   }`}
                 >
                   {num}
@@ -396,7 +570,7 @@ function PinGate({ onSuccess }: { onSuccess: () => void }) {
                 className={`h-14 rounded-2xl bg-slate-950/40 border border-slate-850 text-white font-black text-lg transition-all flex items-center justify-center select-none ${
                   isDisabled
                     ? 'opacity-25 cursor-not-allowed bg-slate-950/10'
-                    : 'hover:bg-slate-800/80 active:bg-slate-700/80 cursor-pointer'
+                    : 'hover:bg-emerald-900/40 active:bg-emerald-800/60 cursor-pointer'
                 }`}
               >
                 0
@@ -411,7 +585,15 @@ function PinGate({ onSuccess }: { onSuccess: () => void }) {
                 <Delete className="h-5 w-5" />
               </button>
             </div>
-          </>
+
+            <button
+              type="button"
+              onClick={() => setShowForgotPinHelp(true)}
+              className="mt-3 mb-2 text-[11px] font-bold text-slate-500 hover:text-emerald-400 hover:underline transition-colors duration-200 cursor-pointer"
+            >
+              忘記 PIN 碼？ / Forgot PIN?
+            </button>
+          </div>
         )}
 
         {/* Back Link */}
@@ -423,6 +605,77 @@ function PinGate({ onSuccess }: { onSuccess: () => void }) {
           <span>返回點餐前台</span>
         </Link>
       </div>
+
+      {/* Forgot PIN Helper Modal */}
+      {showForgotPinHelp && (
+        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-50 flex items-center justify-center p-4">
+          <div className="bg-slate-900 border border-slate-800 w-full max-w-md rounded-3xl p-6 shadow-2xl relative text-slate-100">
+            <button
+              onClick={() => setShowForgotPinHelp(false)}
+              className="absolute right-4 top-4 text-slate-400 hover:text-white p-1 rounded-full bg-slate-850 hover:bg-slate-800 cursor-pointer"
+            >
+              <X className="h-4.5 w-4.5" />
+            </button>
+
+            <div className="flex items-center gap-3 text-emerald-400 mb-4">
+              <div className="bg-emerald-500/15 p-2 rounded-xl border border-emerald-500/30">
+                <KeyRound className="h-5 w-5 stroke-[2.5]" />
+              </div>
+              <h2 className="text-base font-black text-slate-100">
+                忘記 PIN 碼與登入協助
+              </h2>
+            </div>
+            
+            <div className="space-y-4 text-xs text-slate-300">
+              <div className="bg-slate-950/40 border border-slate-850 p-3.5 rounded-xl">
+                <span className="font-extrabold text-slate-400 block mb-1">📞 聯絡系統管理員 (Contact Admin)</span>
+                <p className="leading-relaxed text-slate-400">
+                  如需變更或確認您的員工 PIN 碼，請聯繫各分店店長或系統管理員。
+                  <br />
+                  服務專線：<span className="text-white font-mono font-bold">02-1234-5678</span>
+                </p>
+              </div>
+
+              <div className="bg-slate-950/40 border border-slate-850 p-3.5 rounded-xl space-y-2">
+                <span className="font-extrabold text-emerald-400 block">💡 沙盒測試預設帳密 (Sandbox Defaults)</span>
+                
+                <div className="space-y-1.5 pt-1 border-t border-slate-850/60">
+                  <div className="flex justify-between items-center">
+                    <span className="text-slate-400">總店 PIN：</span>
+                    <span className="font-mono bg-emerald-500/10 text-emerald-400 px-2 py-0.5 rounded font-bold">111111</span>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="text-slate-400">東區分店 PIN：</span>
+                    <span className="font-mono bg-emerald-500/10 text-emerald-400 px-2 py-0.5 rounded font-bold">222222</span>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="text-slate-400">西門店 PIN：</span>
+                    <span className="font-mono bg-emerald-500/10 text-emerald-400 px-2 py-0.5 rounded font-bold">333333</span>
+                  </div>
+                  <div className="flex justify-between items-center pt-1 border-t border-slate-850/60">
+                    <span className="text-slate-400">員工帳號 / PIN：</span>
+                    <span className="font-mono bg-emerald-500/10 text-emerald-400 px-2 py-0.5 rounded font-bold">sabay / 952700</span>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="text-slate-400">高級管理員：</span>
+                    <span className="font-mono bg-indigo-500/10 text-indigo-400 px-2 py-0.5 rounded font-bold">topztar / Eur0pe2266</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="mt-6 flex justify-end">
+              <button
+                type="button"
+                onClick={() => setShowForgotPinHelp(false)}
+                className="w-full py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs rounded-xl transition-all cursor-pointer shadow-lg shadow-emerald-600/15"
+              >
+                我知道了 (Close)
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -491,19 +744,72 @@ function AdminSystem() {
     };
   }, []);
 
+  // Session Expiry Tracker (300 seconds of inactivity triggers warning, 30s before auto-logout)
+  const SESSION_DURATION = 300; // 5 minutes
+  const [sessionTimeLeft, setSessionTimeLeft] = useState<number>(SESSION_DURATION);
+
+  const extendSession = () => {
+    setSessionTimeLeft(SESSION_DURATION);
+  };
+
+  useEffect(() => {
+    if (session) {
+      setSessionTimeLeft(SESSION_DURATION);
+    }
+  }, [session]);
+
+  useEffect(() => {
+    if (!session) return;
+
+    const interval = setInterval(() => {
+      setSessionTimeLeft((prev) => {
+        if (prev <= 1) {
+          clearInterval(interval);
+          logoutSession();
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+
+    const handleUserActivity = () => {
+      setSessionTimeLeft((current) => {
+        // If we've already entered the final 30-second warning state, do not reset via passive background movement.
+        // User must explicitly click "Keep Session Active" (延長會話) to ensure physical presence.
+        if (current > 30) {
+          return SESSION_DURATION;
+        }
+        return current;
+      });
+    };
+
+    window.addEventListener('mousemove', handleUserActivity);
+    window.addEventListener('keydown', handleUserActivity);
+    window.addEventListener('click', handleUserActivity);
+    window.addEventListener('scroll', handleUserActivity);
+
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener('mousemove', handleUserActivity);
+      window.removeEventListener('keydown', handleUserActivity);
+      window.removeEventListener('click', handleUserActivity);
+      window.removeEventListener('scroll', handleUserActivity);
+    };
+  }, [session, logoutSession]);
+
   if (!session) {
     return <PinGate onSuccess={() => {}} />;
   }
 
   return (
-    <div className="min-h-screen flex flex-col bg-slate-900 font-sans antialiased text-slate-100">
+    <div className={`min-h-screen flex flex-col ${session.role === "SUPER_ADMIN" ? "bg-slate-900" : "bg-emerald-950/10"} font-sans antialiased text-slate-100 transition-colors duration-700`}>
       {/* Synchronization HUD */}
       <OfflineQueueHUD />
 
       {/* Backend Premium Header */}
-      <header className="bg-slate-950 border-b border-slate-800 px-6 py-4 flex flex-col md:flex-row items-center justify-between gap-4 shadow-xl">
+      <header className={`${session.role === "SUPER_ADMIN" ? "bg-slate-950 border-slate-800" : "bg-emerald-950 border-emerald-900/30"} border-b px-6 py-4 flex flex-col md:flex-row items-center justify-between gap-4 shadow-xl transition-colors duration-700`}>
         <div className="flex items-center gap-3">
-          <div className={`bg-red-600 p-2 rounded-xl text-white shadow-lg shadow-red-600/30 transition-all duration-1000 ${
+          <div className={`${session.role === "SUPER_ADMIN" ? "bg-red-600 shadow-red-600/30" : "bg-emerald-600 shadow-emerald-600/30"} p-2 rounded-xl text-white transition-all duration-1000 ${
             isIdle
               ? 'animate-[pulse_3s_ease-in-out_infinite] scale-95 opacity-70'
               : 'animate-[pulse_1s_ease-in-out_infinite] scale-100 opacity-100'
@@ -682,7 +988,7 @@ function AdminSystem() {
       </header>
 
       {/* Main Content Area */}
-      <main className="flex-grow flex flex-col pb-28 bg-slate-950/20">
+      <main className={`flex-grow flex flex-col ${session.role === "SUPER_ADMIN" ? "pb-28 bg-slate-950/20" : "pb-6 bg-emerald-950/5"} transition-all`}>
         {currentView === 'kds' && <KitchenDisplaySystem />}
         {currentView === 'manager' && session.role === 'SUPER_ADMIN' && <ManagerDashboard />}
         {currentView === 'tenant-admin' && session.role === 'SUPER_ADMIN' && <TenantManagementView />}
@@ -762,6 +1068,62 @@ function AdminSystem() {
 
           </div>
         </nav>
+      )}
+
+      {/* Session Expiring Warning Banner */}
+      {sessionTimeLeft <= 30 && (
+        <div 
+          id="session-expiry-warning"
+          className={`fixed ${session.role === 'SUPER_ADMIN' ? 'bottom-28' : 'bottom-6'} right-6 z-50 max-w-sm w-[calc(100%-3rem)] sm:w-96 bg-slate-950/95 backdrop-blur-lg border border-red-500/40 rounded-2xl shadow-2xl p-4 text-slate-100 transition-all duration-300 animate-pulse shadow-red-950/50`}
+        >
+          <div className="flex gap-3">
+            <div className="p-2.5 bg-red-500/15 rounded-xl text-red-500 self-start">
+              <AlertTriangle className="h-5 w-5 animate-pulse" />
+            </div>
+            <div className="flex-grow min-w-0">
+              <h4 className="text-xs font-black text-white flex items-center justify-between">
+                <span className="tracking-wide">安全連線即將過期 (Session Expiry)</span>
+                <span className="font-mono text-red-500 text-xs font-black bg-red-500/20 px-2 py-0.5 rounded-full select-none">
+                  {sessionTimeLeft} 秒
+                </span>
+              </h4>
+              <p className="text-[10.5px] text-slate-400 mt-1 leading-relaxed">
+                系統已偵測到閒置。為保障店鋪數據安全，將於 {sessionTimeLeft} 秒後自動登出並關閉安全面板。
+              </p>
+              
+              {/* Subtle Progress Bar */}
+              <div id="session-expiry-progress-track" className="mt-3.5 bg-slate-800 h-1.5 rounded-full overflow-hidden w-full relative">
+                <div 
+                  id="session-expiry-progress-bar"
+                  className="bg-gradient-to-r from-red-500 via-amber-500 to-yellow-500 h-full transition-all duration-1000 ease-linear rounded-full"
+                  style={{ width: `${(sessionTimeLeft / 30) * 100}%` }}
+                />
+              </div>
+
+              {/* Action Buttons */}
+              <div className="flex gap-2.5 mt-3.5">
+                <button
+                  id="session-logout-btn"
+                  type="button"
+                  onClick={() => logoutSession()}
+                  className="flex-1 py-2 bg-slate-900 hover:bg-slate-850 text-slate-400 hover:text-slate-200 border border-slate-800 rounded-xl text-[10.5px] font-bold transition cursor-pointer flex items-center justify-center gap-1"
+                >
+                  <Lock className="h-3 w-3" />
+                  <span>直接登出</span>
+                </button>
+                <button
+                  id="session-extend-btn"
+                  type="button"
+                  onClick={extendSession}
+                  className="flex-1 py-2 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white rounded-xl text-[10.5px] font-black shadow-lg shadow-emerald-600/10 transition cursor-pointer flex items-center justify-center gap-1"
+                >
+                  <Check className="h-3 w-3" />
+                  <span>繼續登入 (Extend)</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

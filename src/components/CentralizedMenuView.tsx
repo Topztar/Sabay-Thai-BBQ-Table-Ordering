@@ -103,10 +103,10 @@ export const CentralizedMenuView: React.FC = () => {
     };
 
     if (editingItem) {
-      await updateMenuItem(itemPayload);
+      updateMenuItem(itemPayload);
       triggerToast(`「${name}」修改成功並已發送分流同步信號！`);
     } else {
-      await addMenuItem(itemPayload);
+      addMenuItem(itemPayload);
       triggerToast(`「${name}」新增成功，已分流至指定的 ${assignedBranches.length} 個店組！`);
     }
 
@@ -496,11 +496,11 @@ export const CentralizedMenuView: React.FC = () => {
                 </button>
                 <button
                   type="button"
-                  onClick={async () => {
+                  onClick={() => {
                     const targetItem = deleteConfirmItem.item;
                     if (targetItem) {
                       try {
-                        await deleteMenuItem(targetItem.id);
+                        deleteMenuItem(targetItem.id);
                         triggerToast(`「${targetItem.name}」已完全下架。`);
                       } catch (err: any) {
                         alert('下架失敗: ' + err.message);

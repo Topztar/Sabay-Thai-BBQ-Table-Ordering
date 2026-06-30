@@ -118,7 +118,7 @@ export const UserManagementView: React.FC = () => {
         ...tenant,
         pin: trimmed
       };
-      await updateTenant(updatedTenant);
+      updateTenant(updatedTenant);
       setEditingBranchId(null);
       setNewBranchPin('');
       setBranchPinSuccess(true);
@@ -164,7 +164,7 @@ export const UserManagementView: React.FC = () => {
     };
 
     try {
-      await addUserAccount(newUser);
+      addUserAccount(newUser);
       
       // Reset form & state
       setNewUsername('');
@@ -399,7 +399,7 @@ export const UserManagementView: React.FC = () => {
                 </span>
               </div>
               <div className="flex justify-between items-center">
-                <span className="text-slate-500 font-medium">當前最高登入 PIN 碼</span>
+                <span className="text-slate-500 font-medium">當前最高登入安全密碼</span>
                 <div className="flex items-center gap-2 font-mono">
                   <span className="text-slate-200 font-bold tracking-widest text-[13px]">
                     {showAdminPin ? adminPin : '••••••'}
@@ -704,10 +704,10 @@ export const UserManagementView: React.FC = () => {
                 </button>
                 <button
                   type="button"
-                  onClick={async () => {
+                  onClick={() => {
                     const targetId = deleteUserConfirm.userId;
                     try {
-                      await deleteUserAccount(targetId);
+                      deleteUserAccount(targetId);
                       setDeleteUserConfirm({ isOpen: false, userId: '', username: '' });
                     } catch (err: any) {
                       alert('刪除失敗: ' + err.message);

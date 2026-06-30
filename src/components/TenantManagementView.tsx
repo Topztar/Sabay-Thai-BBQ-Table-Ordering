@@ -216,7 +216,7 @@ export const TenantManagementView: React.FC = () => {
     };
 
     try {
-      await addTenant(newTenantObj);
+      addTenant(newTenantObj);
       // Reset form
       setNewId('');
       setNewName('');
@@ -276,7 +276,7 @@ export const TenantManagementView: React.FC = () => {
     };
 
     try {
-      await updateTenant(updatedTenantObj);
+      updateTenant(updatedTenantObj);
       setEditingTenant(null);
     } catch (err: any) {
       alert('更新失敗：' + err.message);
@@ -1280,10 +1280,10 @@ export const TenantManagementView: React.FC = () => {
               </button>
               <button
                 type="button"
-                onClick={async () => {
+                onClick={() => {
                   const targetId = deleteConfirmation.tenantId;
                   try {
-                    await deleteTenant(targetId);
+                    deleteTenant(targetId);
                     if (currentTenantId === targetId) {
                       setCurrentTenantId('DEFAULT');
                     }
