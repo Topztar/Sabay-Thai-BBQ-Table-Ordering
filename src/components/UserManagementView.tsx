@@ -33,10 +33,14 @@ export const UserManagementView: React.FC = () => {
 
   const isEffectiveOnline = isOnline && !simulatedOffline;
 
-  // Admin PIN configuration states
-  const [adminPin, setAdminPin] = useState(() => {
-    return localStorage.getItem('sabay_thai_admin_pin') || 'Eur0pe2266';
+  // Admin account and PIN configuration states
+  const [adminUsername, setAdminUsername] = useState(() => {
+    return localStorage.getItem('sabay_thai_admin_username') || 'topztar';
   });
+  const [adminPin, setAdminPin] = useState(() => {
+    return localStorage.getItem('sabay_thai_admin_pin') || '888888';
+  });
+  const [newAdminUsername, setNewAdminUsername] = useState('');
   const [newAdminPin, setNewAdminPin] = useState('');
   const [adminPinError, setAdminPinError] = useState('');
   const [adminPinSuccess, setAdminPinSuccess] = useState(false);
@@ -74,15 +78,34 @@ export const UserManagementView: React.FC = () => {
     setAdminPinError('');
     setAdminPinSuccess(false);
 
-    const trimmed = newAdminPin.trim();
-    if (trimmed.length < 6) {
-      setAdminPinError('管理員安全密碼長度必須至少為 6 位！');
+    const trimmedUsername = newAdminUsername.trim();
+    const trimmedPin = newAdminPin.trim();
+
+    if (!trimmedUsername && !trimmedPin) {
+      setAdminPinError('請至少填寫一項修改內容！');
       return;
     }
 
-    localStorage.setItem('sabay_thai_admin_pin', trimmed);
-    setAdminPin(trimmed);
+    if (trimmedUsername) {
+      if (trimmedUsername.length < 3) {
+        setAdminPinError('最高管理員帳號長度必須至少為 3 位！');
+        return;
+      }
+      localStorage.setItem('sabay_thai_admin_username', trimmedUsername);
+      setAdminUsername(trimmedUsername);
+    }
+
+    if (trimmedPin) {
+      if (trimmedPin.length < 6) {
+        setAdminPinError('管理員安全密碼長度必須至少為 6 位！');
+        return;
+      }
+      localStorage.setItem('sabay_thai_admin_pin', trimmedPin);
+      setAdminPin(trimmedPin);
+    }
+
     setNewAdminPin('');
+    setNewAdminUsername('');
     setAdminPinSuccess(true);
     setTimeout(() => {
       setAdminPinSuccess(false);
@@ -391,15 +414,21 @@ export const UserManagementView: React.FC = () => {
               控制全域系統最高權限 (包含多租戶、菜單分發及離線佇列強制清除等功能)。
             </p>
 
-            <div className="bg-slate-950 rounded-2xl p-4.5 border border-slate-850 text-xs mb-6">
-              <div className="flex justify-between items-center mb-3">
+            <div className="bg-slate-950 rounded-2xl p-4.5 border border-slate-850 text-xs mb-6 space-y-3.5">
+              <div className="flex justify-between items-center">
                 <span className="text-slate-500 font-medium">目前的帳號角色</span>
                 <span className="font-mono bg-indigo-950/40 text-indigo-400 border border-indigo-900/40 px-2.5 py-0.5 rounded font-black text-[10px]">
                   SUPER_ADMIN
                 </span>
               </div>
-              <div className="flex justify-between items-center">
-                <span className="text-slate-500 font-medium">當前最高登入安全密碼</span>
+              <div className="flex justify-between items-center border-t border-slate-850/40 pt-3">
+                <span className="text-slate-500 font-medium">最高管理員帳號</span>
+                <span className="text-slate-200 font-bold font-mono tracking-wide text-xs">
+                  {adminUsername}
+                </span>
+              </div>
+              <div className="flex justify-between items-center border-t border-slate-850/40 pt-3">
+                <span className="text-slate-500 font-medium">最高登入安全密碼</span>
                 <div className="flex items-center gap-2 font-mono">
                   <span className="text-slate-200 font-bold tracking-widest text-[13px]">
                     {showAdminPin ? adminPin : '••••••'}
@@ -414,16 +443,33 @@ export const UserManagementView: React.FC = () => {
               </div>
             </div>
 
-            {/* Change Admin Pin Form */}
+            {/* Change Admin Credentials Form */}
             <form onSubmit={handleUpdateAdminPin} className="space-y-4">
               <div className="space-y-1.5">
                 <label className="text-[10.5px] text-slate-400 font-bold uppercase tracking-wider block">
-                  設定全新最高管理員密碼：
+                  修改最高管理員帳號 (Username)：
+                </label>
+                <div className="relative">
+                  <input
+                    type="text"
+                    placeholder="輸入新管理員帳號 (例如: topztar)"
+                    value={newAdminUsername}
+                    onChange={(e) => {
+                      setNewAdminUsername(e.target.value);
+                    }}
+                    className="w-full bg-slate-950 border border-slate-800 text-slate-200 rounded-xl px-3.5 py-2.5 text-xs font-mono tracking-wide focus:outline-none focus:border-indigo-500/50 transition-colors"
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-[10.5px] text-slate-400 font-bold uppercase tracking-wider block">
+                  修改最高管理員密碼 (Password)：
                 </label>
                 <div className="relative">
                   <input
                     type="password"
-                    placeholder="請輸入管理密碼 (至少 6 位)"
+                    placeholder="輸入新安全密碼 (至少 6 位)"
                     value={newAdminPin}
                     onChange={(e) => {
                       setNewAdminPin(e.target.value);
@@ -445,14 +491,14 @@ export const UserManagementView: React.FC = () => {
 
               <button
                 type="submit"
-                disabled={newAdminPin.length < 6}
+                disabled={!newAdminUsername.trim() && newAdminPin.trim().length < 6}
                 className={`w-full font-black text-xs py-2.5 rounded-xl transition-all ${
-                  newAdminPin.length >= 6
+                  newAdminUsername.trim() || newAdminPin.trim().length >= 6
                     ? 'bg-indigo-600 hover:bg-indigo-500 text-white cursor-pointer shadow-lg shadow-indigo-600/10'
                     : 'bg-slate-800 text-slate-500 cursor-not-allowed border border-slate-850'
                 }`}
               >
-                儲存管理員安全密碼
+                儲存管理員帳號與密碼
               </button>
             </form>
           </section>

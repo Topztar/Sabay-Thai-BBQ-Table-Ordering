@@ -10,6 +10,8 @@ interface OfflineQueueContextType {
   queue: QueueJob[];
   orders: Order[];
   menu: MenuItem[];
+  reconnectSyncMode: 'auto' | 'manual';
+  setReconnectSyncMode: (mode: 'auto' | 'manual') => void;
   setOrders: React.Dispatch<React.SetStateAction<Order[]>>;
   addOrderToQueue: (order: Order) => Promise<void>;
   updateOrderStatus: (orderId: string, status: Order['status'], tenantId: string) => Promise<void>;
@@ -203,7 +205,7 @@ export const OfflineQueueProvider: React.FC<{ children: React.ReactNode }> = ({ 
   });
 
   const [session, setSession] = useState<UserSession | null>(() => {
-    const saved = sessionStorage.getItem('sabay_thai_user_session') || localStorage.getItem('sabay_thai_user_session');
+    const saved = sessionStorage.getItem('sabay_thai_user_session');
     return saved ? JSON.parse(saved) : null;
   });
 
@@ -220,6 +222,16 @@ export const OfflineQueueProvider: React.FC<{ children: React.ReactNode }> = ({ 
   const setKdsViewMode = (mode: 'compact' | 'standard') => {
     setKdsViewModeState(mode);
     localStorage.setItem('kds_view_mode', mode);
+  };
+
+  const [reconnectSyncMode, setReconnectSyncModeState] = useState<'auto' | 'manual'>(() => {
+    const saved = localStorage.getItem('reconnect_sync_mode');
+    return (saved === 'auto' || saved === 'manual') ? saved : 'auto';
+  });
+
+  const setReconnectSyncMode = (mode: 'auto' | 'manual') => {
+    setReconnectSyncModeState(mode);
+    localStorage.setItem('reconnect_sync_mode', mode);
   };
 
   const [menu, setMenu] = useState<MenuItem[]>(() => {
@@ -451,9 +463,13 @@ export const OfflineQueueProvider: React.FC<{ children: React.ReactNode }> = ({ 
   // Handle auto-sync triggers on reconnect
   useEffect(() => {
     if (currentEffectiveOnline && queue.length > 0) {
-      processQueue();
+      if (reconnectSyncMode === 'auto') {
+        processQueue();
+      } else {
+        console.log('[Queue Sync] Connection restored, but reconnectSyncMode is set to manual. Sync must be initiated manually.');
+      }
     }
-  }, [currentEffectiveOnline, queue.length, processQueue]);
+  }, [currentEffectiveOnline, queue.length, reconnectSyncMode, processQueue]);
 
   // 1. Submit customer order
   const addOrderToQueue = async (order: Order) => {
@@ -760,9 +776,10 @@ export const OfflineQueueProvider: React.FC<{ children: React.ReactNode }> = ({ 
     const inputUsername = (username || '').trim().toLowerCase();
 
     if (role === 'SUPER_ADMIN') {
-      // 1. Hardcoded Advanced Admin Login (topztar / dynamic adminPin or Eur0pe2266)
-      const storedAdminPin = localStorage.getItem('sabay_thai_admin_pin') || 'Eur0pe2266';
-      if (inputUsername === 'topztar' && pin === storedAdminPin) {
+      // 1. Hardcoded Advanced Admin Login (custom or topztar / dynamic adminPin or 888888)
+      const storedAdminUsername = localStorage.getItem('sabay_thai_admin_username') || 'topztar';
+      const storedAdminPin = localStorage.getItem('sabay_thai_admin_pin') || '888888';
+      if (inputUsername === storedAdminUsername.toLowerCase() && pin === storedAdminPin) {
         const adminSession: UserSession = {
           role: 'SUPER_ADMIN',
           branchId: 'ALL',
@@ -770,7 +787,6 @@ export const OfflineQueueProvider: React.FC<{ children: React.ReactNode }> = ({ 
         };
         setSession(adminSession);
         sessionStorage.setItem('sabay_thai_user_session', JSON.stringify(adminSession));
-        localStorage.setItem('sabay_thai_user_session', JSON.stringify(adminSession));
         return true;
       }
 
@@ -786,7 +802,6 @@ export const OfflineQueueProvider: React.FC<{ children: React.ReactNode }> = ({ 
         };
         setSession(adminSession);
         sessionStorage.setItem('sabay_thai_user_session', JSON.stringify(adminSession));
-        localStorage.setItem('sabay_thai_user_session', JSON.stringify(adminSession));
         return true;
       }
       return false;
@@ -804,7 +819,23 @@ export const OfflineQueueProvider: React.FC<{ children: React.ReactNode }> = ({ 
         };
         setSession(staffSession);
         sessionStorage.setItem('sabay_thai_user_session', JSON.stringify(staffSession));
-        localStorage.setItem('sabay_thai_user_session', JSON.stringify(staffSession));
+        setCurrentTenantId(branch.id);
+        return true;
+      }
+    }
+
+    // 2b. Branch-specific default PIN quick login (e.g. 111111 for DEFAULT) matching
+    const branch = tenants.find(t => t.id === branchId) || tenants[0];
+    if (branch) {
+      const defaultBranchPin = branch.pin || (branchId === 'DEFAULT' ? '111111' : branchId === 'EAST_BRANCH' ? '222222' : '333333');
+      if ((inputUsername === 'sabay' || !inputUsername) && pin === defaultBranchPin) {
+        const staffSession: UserSession = {
+          role: 'BRANCH_STAFF',
+          branchId: branch.id,
+          branchName: branch.name
+        };
+        setSession(staffSession);
+        sessionStorage.setItem('sabay_thai_user_session', JSON.stringify(staffSession));
         setCurrentTenantId(branch.id);
         return true;
       }
@@ -829,7 +860,6 @@ export const OfflineQueueProvider: React.FC<{ children: React.ReactNode }> = ({ 
         };
         setSession(customSession);
         sessionStorage.setItem('sabay_thai_user_session', JSON.stringify(customSession));
-        localStorage.setItem('sabay_thai_user_session', JSON.stringify(customSession));
         setCurrentTenantId(branch.id);
         return true;
       }
@@ -1022,6 +1052,8 @@ export const OfflineQueueProvider: React.FC<{ children: React.ReactNode }> = ({ 
       queue,
       orders: filteredOrders, // Expose isolated orders securely
       menu,
+      reconnectSyncMode,
+      setReconnectSyncMode,
       setOrders,
       addOrderToQueue,
       updateOrderStatus,

@@ -22,7 +22,7 @@ jobs:
         cd local_app
         pyinstaller pos.spec
     - name: Upload Artifact
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: SabayThaiPOS-Exe
         path: local_app/dist/SabayThaiPOS.exe

@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { useOfflineQueue } from './OfflineQueueContext';
-import { Wifi, WifiOff, RefreshCw, Trash2, ChevronDown, ChevronUp, Database, AlertTriangle, ShieldAlert, Check, X } from 'lucide-react';
+import { Wifi, WifiOff, RefreshCw, Trash2, ChevronDown, ChevronUp, Database, AlertTriangle, ShieldAlert, Check, X, Settings2, Clock } from 'lucide-react';
 
 export const OfflineQueueHUD: React.FC = () => {
   const {
@@ -10,7 +10,9 @@ export const OfflineQueueHUD: React.FC = () => {
     queue,
     purgeQueue,
     forceRetryQueue,
-    tenants
+    tenants,
+    reconnectSyncMode,
+    setReconnectSyncMode
   } = useOfflineQueue();
 
   const [expanded, setExpanded] = useState<boolean>(false);
@@ -52,6 +54,60 @@ export const OfflineQueueHUD: React.FC = () => {
   }, [queue]);
 
   const isActuallyOnline = isOnline && !simulatedOffline;
+
+  const formatTimestamp = (ts: number) => {
+    const d = new Date(ts);
+    const yyyy = d.getFullYear();
+    const mm = String(d.getMonth() + 1).padStart(2, '0');
+    const dd = String(d.getDate()).padStart(2, '0');
+    const hh = String(d.getHours()).padStart(2, '0');
+    const min = String(d.getMinutes()).padStart(2, '0');
+    const ss = String(d.getSeconds()).padStart(2, '0');
+    return `${yyyy}-${mm}-${dd} ${hh}:${min}:${ss}`;
+  };
+
+  const getJobTypeDetails = (job: any) => {
+    if (job.url.includes('/orders') && !job.url.includes('/set-urgent')) {
+      return {
+        label: '新增訂單 (Order Placement)',
+        color: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/25',
+      };
+    }
+    if (job.url.includes('/update-status')) {
+      return {
+        label: '變更狀態 (Status Changed)',
+        color: 'bg-blue-500/10 text-blue-400 border-blue-500/25',
+      };
+    }
+    if (job.url.includes('/flag-order')) {
+      return {
+        label: '標記異常 (Order Flagged)',
+        color: 'bg-amber-500/10 text-amber-400 border-amber-500/25',
+      };
+    }
+    if (job.url.includes('/orders/set-urgent')) {
+      return {
+        label: '變更特急 (Urgency Toggled)',
+        color: 'bg-rose-500/10 text-rose-400 border-rose-500/25',
+      };
+    }
+    if (job.url.includes('/menu-items/')) {
+      return {
+        label: '菜單異動 (Menu Updated)',
+        color: 'bg-purple-500/10 text-purple-400 border-purple-500/25',
+      };
+    }
+    if (job.url.includes('/users/')) {
+      return {
+        label: '帳號異動 (User Updated)',
+        color: 'bg-teal-500/10 text-teal-400 border-teal-500/25',
+      };
+    }
+    return {
+      label: `系統異動 (${job.method})`,
+      color: 'bg-slate-500/10 text-slate-400 border-slate-500/25',
+    };
+  };
 
   return (
     <div className={`sticky top-0 z-50 transition-colors duration-300 ${
@@ -108,6 +164,36 @@ export const OfflineQueueHUD: React.FC = () => {
           )}
         </div>
 
+        {/* Connection Restore Strategy Setting */}
+        <div className="flex items-center gap-1.5 bg-slate-800/60 border border-slate-700/60 rounded-xl px-2.5 py-1 text-xs">
+          <Settings2 className="h-3.5 w-3.5 text-slate-400" />
+          <span className="text-slate-300 font-medium mr-1">連線恢復同步：</span>
+          <div className="flex items-center gap-1">
+            <button
+              onClick={() => setReconnectSyncMode('auto')}
+              className={`text-[10px] px-2.5 py-0.5 rounded-md font-extrabold transition-all cursor-pointer ${
+                reconnectSyncMode === 'auto'
+                  ? 'bg-emerald-500 text-white shadow-sm'
+                  : 'bg-slate-900/40 text-slate-400 hover:text-slate-200 hover:bg-slate-900/60'
+              }`}
+              title="自動同步：當檢測到網路恢復，自動嘗試背景重播同步"
+            >
+              自動嘗試
+            </button>
+            <button
+              onClick={() => setReconnectSyncMode('manual')}
+              className={`text-[10px] px-2.5 py-0.5 rounded-md font-extrabold transition-all cursor-pointer ${
+                reconnectSyncMode === 'manual'
+                  ? 'bg-amber-500 text-white shadow-sm'
+                  : 'bg-slate-900/40 text-slate-400 hover:text-slate-200 hover:bg-slate-900/60'
+              }`}
+              title="人工確認：網路恢復時保持快取佇列，直到管理員點擊「手動重試」確認後才開始同步，防止衝突"
+            >
+              人工確認
+            </button>
+          </div>
+        </div>
+
         {/* Action Controls */}
         <div className="flex items-center gap-2">
           {/* Simulate Offline Toggle */}
@@ -153,42 +239,81 @@ export const OfflineQueueHUD: React.FC = () => {
 
       {/* Expanded Jobs List */}
       {expanded && queue.length > 0 && (
-        <div className="bg-slate-950 border-t border-slate-800 p-4 max-h-60 overflow-y-auto">
-          <div className="max-w-7xl mx-auto">
-            <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2 flex items-center gap-2">
-              <span>待處理佇列項目列表 (First-In, First-Out Queue)</span>
-              <span className="text-[10px] text-amber-500 bg-amber-500/10 px-1.5 py-0.5 rounded border border-amber-500/20">
-                順序執行
-              </span>
-            </h3>
-            <div className="space-y-2">
-              {queue.map((job, idx) => (
-                <div
-                  key={job.id}
-                  className="bg-slate-900 border border-slate-800 hover:border-slate-700 rounded p-3 text-xs flex items-start justify-between gap-4 transition-colors"
-                >
-                  <div className="space-y-1">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <span className="bg-slate-800 px-1.5 py-0.5 rounded font-mono text-[10px] text-slate-300 font-bold">
-                        #{idx + 1}
-                      </span>
-                      <span className="font-semibold text-slate-200">{job.description}</span>
-                      <span className="text-slate-500">|</span>
-                      <span className="font-mono text-slate-400 text-[10px]">{job.id}</span>
-                    </div>
-                    <div className="flex gap-4 text-slate-400 text-[10px] font-mono">
-                      <span>URL: <span className="text-blue-400">{job.url}</span></span>
-                      <span>Method: <span className="text-purple-400">{job.method}</span></span>
-                      <span>時間: <span className="text-amber-400">{new Date(job.timestamp).toLocaleTimeString()}</span></span>
-                    </div>
-                  </div>
-                  <div className="text-right flex flex-col gap-1">
-                    <span className="bg-slate-800 text-slate-300 px-2 py-0.5 rounded text-[10px] font-semibold border border-slate-700">
-                      PENDING SYNC
-                    </span>
-                  </div>
+        <div className="bg-slate-950 border-t border-slate-850 p-4 max-h-80 overflow-y-auto">
+          <div className="max-w-7xl mx-auto space-y-3.5">
+            {/* Warning when connection is back but in manual mode */}
+            {isActuallyOnline && reconnectSyncMode === 'manual' && (
+              <div className="bg-amber-500/10 border border-amber-500/30 rounded-2xl p-4 flex items-start gap-3 text-xs text-amber-200 animate-fadeIn">
+                <AlertTriangle className="h-5 w-5 text-amber-400 shrink-0 mt-0.5 animate-bounce" />
+                <div className="space-y-1">
+                  <p className="font-extrabold text-sm text-white">⚠️ 連線已恢復，但目前同步模式為「人工確認後同步」</p>
+                  <p className="text-slate-300 leading-relaxed text-[11px]">
+                    系統為防止在不穩定或高延遲網路環境下對資料庫造成覆寫或衝突，已暫停背景自動同步。請管理員在檢視完下方佇列後，
+                    點擊右上角的 <strong className="text-amber-400 font-extrabold">「手動重試」</strong> 按鈕手動啟動同步。
+                  </p>
                 </div>
-              ))}
+              </div>
+            )}
+
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-1 border-b border-slate-900">
+              <h3 className="text-xs font-black text-slate-400 uppercase tracking-wider flex items-center gap-2">
+                <span>待處理佇列項目列表 (First-In, First-Out Queue)</span>
+                <span className="text-[10px] text-amber-400 bg-amber-500/10 px-2 py-0.5 rounded border border-amber-500/20 font-bold">
+                  順序執行 (FIFO)
+                </span>
+              </h3>
+              <div className="text-[11px] text-slate-500">
+                同步恢復設定：
+                <span className={`font-bold ${reconnectSyncMode === 'auto' ? 'text-emerald-400' : 'text-amber-400'}`}>
+                  {reconnectSyncMode === 'auto' ? '自動背景同步' : '人工確認後同步'}
+                </span>
+              </div>
+            </div>
+
+            <div className="space-y-2.5">
+              {queue.map((job, idx) => {
+                const typeInfo = getJobTypeDetails(job);
+                return (
+                  <div
+                    key={job.id}
+                    className="bg-slate-900/60 hover:bg-slate-900 border border-slate-850 hover:border-slate-800 rounded-2xl p-4 text-xs flex flex-col md:flex-row md:items-center justify-between gap-4 transition-all"
+                  >
+                    <div className="space-y-2 flex-1">
+                      <div className="flex items-center gap-2.5 flex-wrap">
+                        <span className="bg-slate-800 px-2 py-0.5 rounded-lg font-mono text-[11px] text-slate-300 font-black border border-slate-700">
+                          #{idx + 1}
+                        </span>
+                        <span className={`px-2 py-0.5 rounded-md text-[10px] font-black border uppercase tracking-wider ${typeInfo.color}`}>
+                          {typeInfo.label}
+                        </span>
+                        <span className="font-bold text-slate-100 text-sm">{job.description}</span>
+                      </div>
+                      
+                      <div className="flex flex-wrap gap-x-5 gap-y-1.5 text-slate-400 text-[11px] font-mono">
+                        <span className="flex items-center gap-1">
+                          <Clock className="h-3.5 w-3.5 text-slate-500" />
+                          <span>建立時間: <span className="text-amber-400 font-semibold">{formatTimestamp(job.timestamp)}</span></span>
+                        </span>
+                        <span>
+                          方法: <span className="text-purple-400 font-semibold uppercase">{job.method}</span>
+                        </span>
+                        <span>
+                          端點: <span className="text-blue-400 font-semibold break-all">{job.url}</span>
+                        </span>
+                        <span>
+                          任務ID: <span className="text-slate-500 text-[10px]">{job.id}</span>
+                        </span>
+                      </div>
+                    </div>
+                    
+                    <div className="flex items-center gap-2.5 shrink-0 justify-end md:justify-start">
+                      <span className="bg-amber-500/10 text-amber-400 border border-amber-500/20 px-2.5 py-1 rounded-full text-[10.5px] font-black tracking-wider animate-pulse">
+                        PENDING SYNC
+                      </span>
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           </div>
         </div>

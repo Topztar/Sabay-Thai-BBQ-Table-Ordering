@@ -944,17 +944,17 @@ export const CustomerOrderView: React.FC = () => {
       <div className="max-w-7xl mx-auto px-4 py-6">
         
         {/* Left Side Fixed Category Sidebar */}
-        <div className="fixed left-0 top-[180px] md:top-[220px] z-30 bg-white/95 backdrop-blur-md shadow-lg border border-slate-200 rounded-r-2xl w-20 md:w-24 flex flex-col max-h-[60vh]">
-          {/* Search Input at the very top */}
-          <div className="p-1.5 border-b border-slate-100 bg-slate-50/50 flex-shrink-0 rounded-tr-2xl h-10 relative">
-            <div className="absolute left-1.5 top-1.5 w-[calc(100%-12px)] transition-all duration-300 ease-out focus-within:w-44 md:focus-within:w-52 focus-within:shadow-xl focus-within:z-50 bg-white rounded-lg">
-              <div className="relative">
+        <div className="fixed left-0 top-[180px] md:top-[220px] z-30 bg-white/95 backdrop-blur-md shadow-lg border border-slate-200 rounded-r-2xl w-20 md:w-24 flex flex-col max-h-[85vh]">
+          {/* Search Input at the very top - flush with no padding gaps */}
+          <div className="border-b border-slate-150 bg-white flex-shrink-0 h-10 relative">
+            <div className="absolute left-0 top-0 h-full w-[calc(100%-4px)] transition-all duration-300 ease-out focus-within:w-44 md:focus-within:w-52 focus-within:shadow-xl focus-within:z-50 bg-white rounded-r-lg border-b border-r border-slate-200">
+              <div className="relative h-full flex items-center">
                 <input
                   type="text"
                   placeholder={t.searchMenu}
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  className="w-full pl-6 pr-6 py-1 text-[10px] md:text-xs bg-white border border-slate-200 rounded-lg focus:ring-2 focus:ring-red-500/20 focus:border-red-500 outline-none transition-all placeholder:text-slate-400 text-slate-800"
+                  className="w-full h-full pl-6 pr-6 py-1 text-[10px] md:text-xs bg-white rounded-r-lg outline-none focus:ring-2 focus:ring-red-500/20 focus:border-red-500 transition-all placeholder:text-slate-400 text-slate-800"
                 />
                 <Search className="absolute left-1.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400" />
                 {searchQuery && (
@@ -973,14 +973,14 @@ export const CustomerOrderView: React.FC = () => {
           <div className="flex flex-col divide-y divide-slate-150 w-full overflow-y-auto scrollbar-none">
             <button
               onClick={() => setSelectedCategory('All')}
-              className={`aspect-square w-full flex flex-col items-center justify-center gap-1 p-2 transition-all cursor-pointer flex-shrink-0 ${
+              className={`w-full py-2.5 md:py-4 min-h-[64px] md:min-h-[76px] h-auto flex flex-col items-center justify-center gap-1 p-1.5 transition-all cursor-pointer flex-shrink-0 ${
                 selectedCategory === 'All'
-                  ? 'bg-red-600 text-white font-black'
+                  ? 'bg-red-600 text-white font-black animate-pulse'
                   : 'bg-white text-slate-600 hover:bg-slate-50 font-medium'
               }`}
             >
-              <Grid className="h-4.5 w-4.5 md:h-5 md:w-5" />
-              <span className="text-[9px] md:text-[10px] tracking-tight text-center leading-none">{t.allCategories}</span>
+              <Grid className="h-5.5 w-5.5 md:h-6.5 md:w-6.5 transition-all flex-shrink-0" />
+              <span className="text-[10px] md:text-[11px] font-black tracking-tight text-center leading-tight px-0.5 break-words w-full">{t.allCategories}</span>
             </button>
             {dynamicCategories.map(cat => {
               const isActive = selectedCategory === cat;
@@ -988,22 +988,22 @@ export const CustomerOrderView: React.FC = () => {
                 <button
                   key={cat}
                   onClick={() => setSelectedCategory(cat)}
-                  className={`aspect-square w-full flex flex-col items-center justify-center gap-1 p-2 transition-all cursor-pointer flex-shrink-0 ${
+                  className={`w-full py-2.5 md:py-4 min-h-[64px] md:min-h-[76px] h-auto flex flex-col items-center justify-center gap-1 p-1.5 transition-all cursor-pointer flex-shrink-0 ${
                     isActive
                       ? 'bg-red-600 text-white font-black'
                       : 'bg-white text-slate-600 hover:bg-slate-50 font-medium'
                   }`}
                 >
                   {cat === 'BBQ' ? (
-                    <Flame className="h-4.5 w-4.5 md:h-5 md:w-5" />
+                    <Flame className="h-5.5 w-5.5 md:h-6.5 md:w-6.5 transition-all flex-shrink-0" />
                   ) : cat === 'Appetizers' ? (
-                    <Soup className="h-4.5 w-4.5 md:h-5 md:w-5" />
+                    <Soup className="h-5.5 w-5.5 md:h-6.5 md:w-6.5 transition-all flex-shrink-0" />
                   ) : cat === 'Beverages' ? (
-                    <CupSoda className="h-4.5 w-4.5 md:h-5 md:w-5" />
+                    <CupSoda className="h-5.5 w-5.5 md:h-6.5 md:w-6.5 transition-all flex-shrink-0" />
                   ) : (
-                    <Soup className="h-4.5 w-4.5 md:h-5 md:w-5" />
+                    <Soup className="h-5.5 w-5.5 md:h-6.5 md:w-6.5 transition-all flex-shrink-0" />
                   )}
-                  <span className="text-[9px] md:text-[10px] tracking-tight text-center leading-none">
+                  <span className="text-[10px] md:text-[11px] font-black tracking-tight text-center leading-tight px-0.5 break-words w-full">
                     {cat === 'BBQ' ? ui.bbq : cat === 'Appetizers' ? ui.appetizers : cat === 'Beverages' ? ui.drinks : cat}
                   </span>
                 </button>
@@ -1024,19 +1024,14 @@ export const CustomerOrderView: React.FC = () => {
                 <div
                   key={item.id}
                   onClick={() => handleItemClick(item)}
-                  className="bg-white rounded-2xl border border-slate-100 hover:border-red-500/30 shadow-sm hover:shadow-md transition-all cursor-pointer flex gap-4 p-4 relative"
+                  className="bg-white rounded-2xl border border-slate-100 hover:border-red-500/30 shadow-sm hover:shadow-md transition-all cursor-pointer flex flex-col justify-between p-5 relative"
                 >
-                  {/* Item Thumbnail Placeholder */}
-                  <div className="relative w-24 h-24 rounded-xl bg-gradient-to-br from-amber-100 to-rose-100 flex items-center justify-center text-red-500 font-extrabold border border-slate-100 shrink-0 select-none">
-                    <Flame className="h-10 w-10 text-red-500/60" />
-                    
-                    {/* Selected count badge on the top-right corner of the image */}
-                    {getItemQuantityInCart(item.id) > 0 && (
-                      <span className="absolute -top-1.5 -right-1.5 bg-yellow-400 text-red-950 text-xs font-black w-6 h-6 rounded-full flex items-center justify-center border-2 border-white shadow-md animate-scale-in">
-                        {getItemQuantityInCart(item.id)}
-                      </span>
-                    )}
-                  </div>
+                  {/* Selected count badge on the top-right corner of the card */}
+                  {getItemQuantityInCart(item.id) > 0 && (
+                    <span className="absolute -top-1.5 -right-1.5 bg-yellow-400 text-red-950 text-xs font-black w-6 h-6 rounded-full flex items-center justify-center border-2 border-white shadow-md animate-scale-in z-10">
+                      {getItemQuantityInCart(item.id)}
+                    </span>
+                  )}
 
                   {/* Details */}
                   <div className="flex flex-col justify-between flex-grow min-w-0 w-full">
@@ -1278,6 +1273,19 @@ export const CustomerOrderView: React.FC = () => {
 
             {/* Modal Body */}
             <div className="p-6 space-y-5">
+              {/* Meal Photo inside Modal (Displayed after clicking into the window) */}
+              <div className="relative w-full h-48 rounded-2xl bg-gradient-to-br from-amber-50 to-rose-50 flex items-center justify-center text-red-500 border border-slate-100/80 select-none overflow-hidden shadow-inner">
+                {selectedMenuItem.category === 'BBQ' ? (
+                  <Flame className="h-16 w-16 text-red-500/60 animate-pulse" />
+                ) : selectedMenuItem.category === 'Appetizers' ? (
+                  <Soup className="h-16 w-16 text-red-500/60 animate-pulse" />
+                ) : selectedMenuItem.category === 'Beverages' ? (
+                  <CupSoda className="h-16 w-16 text-red-500/60 animate-pulse" />
+                ) : (
+                  <Soup className="h-16 w-16 text-red-500/60 animate-pulse" />
+                )}
+              </div>
+
               {getTranslatedMenuItemDesc(selectedMenuItem, lang) && (
                 <p className="text-xs text-slate-500 leading-relaxed bg-slate-50 p-3.5 rounded-2xl border border-slate-100/80">
                   {getTranslatedMenuItemDesc(selectedMenuItem, lang)}
