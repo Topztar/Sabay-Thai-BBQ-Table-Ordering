@@ -1,0 +1,101 @@
+276:        {/* Tab Switcher */}
+277-        <div className="flex w-full gap-2 p-1 bg-slate-950/50 rounded-2xl border border-slate-800/50 mb-8">
+278-          <button
+279-            type="button"
+280-            onClick={() => {
+281-                        lockBranch(selectedBranchId);
+282-                        setPin(\'\');
+283-                        setError(\'\');
+284-                      }}
+285-                      className="text-[10px] font-bold text-rose-400 hover:text-rose-300 flex items-center gap-1 cursor-pointer hover:underline"
+286-                    >
+287-                      <Lock className="h-3 w-3" />
+288-                      <span>安全鎖定分店</span>
+289-                    </button>
+290-                  </div>
+291-
+292-                  <div className="w-full mb-4">
+293-                    <label className="block text-[10px] text-slate-500 font-black mb-1.5 uppercase tracking-wider">選擇駐點店別 (Branch Target)</label>
+294-                    <select
+295-                      value={selectedBranchId}
+296-                      onChange={(e) => { setSelectedBranchId(e.target.value); setPin(''); setError(''); }}
+297-                      disabled={isDisabled}
+298-                      className="w-full bg-slate-950 border border-slate-800 text-xs font-black text-white rounded-xl py-2.5 px-3 focus:outline-none focus:border-emerald-500"
+299-                    >
+300-                      {tenants.map(t => (
+301-                        <option key={t.id} value={t.id}>{t.name}</option>
+302-                      ))}
+303-                    </select>
+304-                  </div>
+305-
+306-                  <div className="flex justify-center gap-3.5 mb-5">
+307-                    {[...Array(6)].map((_, i) => (
+308-                      <div
+309-                        key={i}
+310-                        className={`w-3.5 h-3.5 rounded-full transition-all duration-300 border ${
+311-                          lockoutTime > 0
+312-                            ? 'bg-slate-800 border-slate-700/60'
+313-                            : i < pin.length
+314-                              ? 'bg-emerald-500 border-emerald-400 shadow-lg shadow-emerald-500/50 scale-110'
+315-                              : 'bg-slate-950 border-slate-800'
+316-                        }`}
+317-                      />
+318-                    ))}
+319-                  </div>
+320-
+321-                  <div className="h-8 mb-4 flex items-center justify-center text-center">
+322-                    {lockoutTime > 0 ? (
+323-                      <div className="flex items-center gap-2 text-[11px] text-amber-400 font-extrabold bg-amber-500/10 border border-amber-500/20 px-4 py-1 rounded-full">
+324-                        <span className="animate-spin h-3 w-3 border-2 border-amber-400 border-t-transparent rounded-full" />
+325-                        <span>鎖定中！請等待 {lockoutTime} 秒</span>
+326-                      </div>
+327-                    ) : error ? (
+328-                      <div className="flex items-center gap-1.5 text-[11px] text-red-400 font-extrabold bg-red-500/10 border border-red-500/20 px-3.5 py-1 rounded-full">
+329-                        <AlertCircle className="h-3.5 w-3.5" />
+330-                        <span>{error}</span>
+331-                      </div>
+332-                    ) : (
+333-                      <div className="flex items-center gap-1 text-[10px] text-slate-500 font-mono">
+334-                        <KeyRound className="h-3 w-3" />
+335-                        <span>請輸入該分店 6 位數預設 PIN 碼</span>
+336-                      </div>
+337-                    )}
+338-                  </div>
+339-
+340-                  <div className="grid grid-cols-3 gap-3 w-full max-w-xs mb-6">
+341-                    {['1', '2', '3', '4', '5', '6', '7', '8', '9'].map((num) => (
+342-                      <button
+343-                        key={num}
+344-                        onClick={() => handleKeyPress(num)}
+345-                        disabled={isDisabled}
+346-                        type="button"
+347-                        className={`h-14 rounded-2xl bg-slate-950/40 border border-slate-850 text-white font-black text-lg transition-all flex items-center justify-center select-none ${
+348-                          isDisabled
+349-                            ? 'opacity-25 cursor-not-allowed bg-slate-950/10'
+350-                            : 'hover:bg-emerald-900/40 active:bg-emerald-800/60 cursor-pointer'
+351-                        }`}
+352-                      >
+353-                        {num}
+354-                      </button>
+355-                    ))}
+356-                    <button
+357-                      onClick={handleClear}
+358-                      disabled={isDisabled}
+359-                      type="button"
+360-                      className={`h-14 rounded-2xl text-slate-500 hover:text-slate-300 font-extrabold text-xs transition-all flex items-center justify-center select-none border border-transparent ${
+361-                        isDisabled ? 'opacity-25 cursor-not-allowed' : 'hover:bg-slate-800/20 cursor-pointer'
+362-                      }`}
+363-                    >
+364-                      清除
+365-                    </button>
+366-                    <button
+367-                      onClick={() => handleKeyPress('0')}
+368-                      disabled={isDisabled}
+369-                      type="button"
+370-                      className={`h-14 rounded-2xl bg-slate-950/40 border border-slate-850 text-white font-black text-lg transition-all flex items-center justify-center select-none ${
+371-                        isDisabled
+372-                          ? 'opacity-25 cursor-not-allowed bg-slate-950/10'
+373-                          : 'hover:bg-emerald-900/40 active:bg-emerald-800/60 cursor-pointer'
+374-                      }`}
+375-                    >
+376-                      0

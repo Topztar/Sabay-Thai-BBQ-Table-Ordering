@@ -35,7 +35,7 @@ import {
 type AdminViewMode = 'kds' | 'manager' | 'tenant-admin' | 'central-menu' | 'user-management';
 
 function PinGate({ onSuccess }: { onSuccess: () => void }) {
-  const { tenants, loginSession, users } = useOfflineQueue();
+  const { tenants, loginSession, users, unlockedBranches, unlockBranch, lockBranch } = useOfflineQueue();
   const [role, setRole] = useState<UserRole>('SUPER_ADMIN');
   const [selectedBranchId, setSelectedBranchId] = useState<string>('DEFAULT');
   const [pin, setPin] = useState<string>('');
@@ -48,15 +48,7 @@ function PinGate({ onSuccess }: { onSuccess: () => void }) {
   const [isCooldown, setIsCooldown] = useState<boolean>(false);
   const [showForgotPinHelp, setShowForgotPinHelp] = useState<boolean>(false);
 
-  // Keep track of unlocked branches on this device
-  const [unlockedBranches, setUnlockedBranches] = useState<string[]>(() => {
-    try {
-      const stored = sessionStorage.getItem('sabay_unlocked_branches');
-      return stored ? JSON.parse(stored) : [];
-    } catch {
-      return [];
-    }
-  });
+
 
   // Branch level full login input state (Step 1 & Form Login)
   const [branchAccount, setBranchAccount] = useState<string>('sabay');
@@ -209,11 +201,7 @@ function PinGate({ onSuccess }: { onSuccess: () => void }) {
 
     if (success) {
       // Automatically unlock/activate the selected branch on this device if not already
-      if (!unlockedBranches.includes(selectedBranchId)) {
-        const nextUnlocked = [...unlockedBranches, selectedBranchId];
-        setUnlockedBranches(nextUnlocked);
-        sessionStorage.setItem('sabay_unlocked_branches', JSON.stringify(nextUnlocked));
-      }
+      unlockBranch(selectedBranchId);
 
       setTimeout(() => {
         onSuccess();
@@ -233,7 +221,7 @@ function PinGate({ onSuccess }: { onSuccess: () => void }) {
     }
   };
 
-  return (
+    return (
     <div className={`min-h-screen ${role === 'SUPER_ADMIN' ? 'bg-slate-950' : 'bg-emerald-950/20'} flex flex-col justify-center items-center px-4 py-12 relative overflow-hidden font-sans antialiased transition-colors duration-700`}>
       {/* Decorative background glows */}
       <div className={`absolute top-1/4 left-1/2 -translate-x-1/2 -translate-y-1/2 w-80 h-80 ${role === 'SUPER_ADMIN' ? 'bg-indigo-600/10' : 'bg-emerald-600/10'} rounded-full blur-3xl pointer-events-none transition-colors duration-700`} />
@@ -302,7 +290,7 @@ function PinGate({ onSuccess }: { onSuccess: () => void }) {
           </button>
           <button
             type="button"
-            onClick={() => { setRole('BRANCH_STAFF'); setPin(''); setAdminUsername(''); setError(''); }}
+            onClick={() => { setRole('BRANCH_STAFF'); setPin(''); setBranchAccount('sabay'); setError(''); }}
             disabled={isDisabled}
             className={`flex-1 py-3.5 rounded-2xl border text-[11px] font-black transition-all flex flex-col items-center gap-1.5 cursor-pointer ${
               role === 'BRANCH_STAFF'
@@ -356,7 +344,7 @@ function PinGate({ onSuccess }: { onSuccess: () => void }) {
               ) : (
                 <div className="flex items-center gap-1 text-[10px] text-slate-500 font-mono">
                   <KeyRound className="h-3 w-3" />
-                  <span>請輸入管理員帳密進行授權</span>
+                  <span>管理員帳號登入系統</span>
                 </div>
               )}
             </div>
@@ -364,21 +352,10 @@ function PinGate({ onSuccess }: { onSuccess: () => void }) {
             <button
               type="submit"
               disabled={isDisabled}
-              className={`w-full py-3 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white font-black text-xs rounded-xl shadow-lg transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
-                isDisabled ? 'opacity-50 cursor-not-allowed' : ''
-              }`}
+              className="w-full py-3 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white font-black text-xs rounded-xl shadow-lg shadow-indigo-600/10 transition-all flex items-center justify-center gap-1.5 cursor-pointer"
             >
-              {isVerifying ? (
-                <>
-                  <span className="animate-spin h-3.5 w-3.5 border-2 border-white border-t-transparent rounded-full" />
-                  <span>驗證身分中...</span>
-                </>
-              ) : (
-                <>
-                  <KeyRound className="h-3.5 w-3.5" />
-                  <span>登入後台系統</span>
-                </>
-              )}
+              <Check className="h-3.5 w-3.5" />
+              <span>進入管理控制台</span>
             </button>
 
             <div className="flex justify-center pt-2">
@@ -415,7 +392,7 @@ function PinGate({ onSuccess }: { onSuccess: () => void }) {
                     : 'text-slate-500 hover:text-slate-300 border border-transparent'
                 }`}
               >
-                {!unlockedBranches.includes(selectedBranchId) && <Lock className="h-3 w-3 text-slate-500" />}
+                {!unlockedBranches[selectedBranchId] && <Lock className="h-3 w-3 text-slate-500" />}
                 <span>PIN 快速登入</span>
               </button>
             </div>
@@ -437,7 +414,7 @@ function PinGate({ onSuccess }: { onSuccess: () => void }) {
                 </div>
 
                 <div>
-                  <label className="block text-[10px] text-slate-500 font-black mb-1.5 uppercase tracking-wider">使用者帳號 (Account)</label>
+                  <label className="block text-[10px] text-slate-500 font-black mb-1.5 uppercase tracking-wider">使用者帳號 (Username)</label>
                   <input
                     type="text"
                     value={branchAccount}
@@ -477,14 +454,14 @@ function PinGate({ onSuccess }: { onSuccess: () => void }) {
                 <button
                   type="submit"
                   disabled={isDisabled}
-                  className="w-full py-3 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-black text-xs rounded-xl shadow-lg transition-all flex items-center justify-center gap-1.5 cursor-pointer"
+                  className="w-full py-3 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-black text-xs rounded-xl shadow-lg shadow-emerald-600/10 transition-all flex items-center justify-center gap-1.5 cursor-pointer"
                 >
                   <Check className="h-3.5 w-3.5" />
                   <span>登入使用者後台</span>
                 </button>
               </form>
             ) : (
-              !unlockedBranches.includes(selectedBranchId) ? (
+              !unlockedBranches[selectedBranchId] ? (
                 <div className="w-full py-5 text-center space-y-4">
                   <div className="bg-amber-500/15 border border-amber-500/30 rounded-2xl p-4 text-xs text-amber-400 space-y-1.5 text-center max-w-sm mx-auto">
                     <AlertTriangle className="h-6 w-6 text-amber-500 mx-auto mb-1 animate-bounce" />
@@ -512,9 +489,7 @@ function PinGate({ onSuccess }: { onSuccess: () => void }) {
                     <button
                       type="button"
                       onClick={() => {
-                        const nextUnlocked = unlockedBranches.filter(id => id !== selectedBranchId);
-                        setUnlockedBranches(nextUnlocked);
-                        sessionStorage.setItem('sabay_unlocked_branches', JSON.stringify(nextUnlocked));
+                        lockBranch(selectedBranchId);
                         setPin('');
                         setError('');
                       }}
@@ -615,8 +590,8 @@ function PinGate({ onSuccess }: { onSuccess: () => void }) {
                       onClick={handleBackspace}
                       disabled={isDisabled}
                       type="button"
-                      className={`h-14 rounded-2xl text-slate-500 hover:text-slate-300 font-extrabold transition-all flex items-center justify-center select-none border border-transparent ${
-                        isDisabled ? 'opacity-25 cursor-not-allowed' : 'hover:bg-slate-800/20 cursor-pointer'
+                      className={`h-14 rounded-2xl text-slate-500 hover:text-rose-400 transition-all flex items-center justify-center select-none border border-transparent ${
+                        isDisabled ? 'opacity-25 cursor-not-allowed' : 'hover:bg-rose-950/10 cursor-pointer'
                       }`}
                     >
                       <Delete className="h-5 w-5" />
@@ -628,10 +603,9 @@ function PinGate({ onSuccess }: { onSuccess: () => void }) {
           </div>
         )}
 
-        {/* Back Link */}
         <Link
           to="/"
-          className="flex items-center gap-1.5 text-[11px] text-slate-400 hover:text-white font-extrabold transition-all px-4 py-2 bg-slate-950/40 hover:bg-slate-850/60 border border-slate-850/60 rounded-xl cursor-pointer"
+          className="mt-2 text-[10.5px] font-bold text-slate-600 hover:text-slate-400 transition-all flex items-center gap-1 py-1.5 px-3 rounded-lg hover:bg-slate-900/50"
         >
           <ArrowLeft className="h-3.5 w-3.5" />
           <span>返回點餐前台</span>
@@ -862,198 +836,396 @@ function AdminSystem() {
     return <PinGate onSuccess={() => {}} />;
   }
 
-  return (
-    <div className={`min-h-screen flex flex-col ${session.role === "SUPER_ADMIN" ? "bg-slate-900" : "bg-emerald-950/10"} font-sans antialiased text-slate-100 transition-all duration-700 ${isIdle ? 'filter contrast-[0.6] brightness-[0.4]' : 'filter-none'}`}>
-      {/* Synchronization HUD */}
-      <OfflineQueueHUD />
+    return (
+    <div className={`min-h-screen ${role === 'SUPER_ADMIN' ? 'bg-slate-950' : 'bg-emerald-950/20'} flex flex-col justify-center items-center px-4 py-12 relative overflow-hidden font-sans antialiased transition-colors duration-700`}>
+      {/* Decorative background glows */}
+      <div className={`absolute top-1/4 left-1/2 -translate-x-1/2 -translate-y-1/2 w-80 h-80 ${role === 'SUPER_ADMIN' ? 'bg-indigo-600/10' : 'bg-emerald-600/10'} rounded-full blur-3xl pointer-events-none transition-colors duration-700`} />
+      <div className={`absolute bottom-1/4 left-1/2 -translate-x-1/2 translate-y-1/2 w-80 h-80 ${role === 'SUPER_ADMIN' ? 'bg-purple-600/10' : 'bg-teal-600/10'} rounded-full blur-3xl pointer-events-none transition-colors duration-700`} />
 
-      {/* Backend Premium Header */}
-      <header className={`${session.role === "SUPER_ADMIN" ? "bg-slate-950 border-slate-800" : "bg-emerald-950 border-emerald-900/30"} border-b px-6 py-4 flex flex-col md:flex-row items-center justify-between gap-4 shadow-xl transition-colors duration-700`}>
-        <div className="flex items-center gap-3">
-          <div className={`${session.role === "SUPER_ADMIN" ? "bg-red-600 shadow-red-600/30" : "bg-emerald-600 shadow-emerald-600/30"} p-2 rounded-xl text-white transition-all duration-1000 ${
-            isIdle
-              ? 'animate-[pulse_3s_ease-in-out_infinite] scale-95 opacity-70'
-              : 'animate-[pulse_1s_ease-in-out_infinite] scale-100 opacity-100'
-          }`}>
-            <Flame className="h-6 w-6" />
-          </div>
-          <div>
-            <div className="flex items-center gap-2">
-              <h1 className="text-lg font-black tracking-wider text-white">Sabay Thai BBQ 后台系統</h1>
-              {isIdle && (
-                <span className="bg-slate-900 text-[9px] text-slate-400 border border-slate-800 px-2 py-0.5 rounded-full font-bold uppercase tracking-wider animate-pulse">
-                  系統閒置中 (Idle)
-                </span>
-              )}
+      <div className={`w-full max-w-md ${role === 'SUPER_ADMIN' ? 'bg-slate-900/85 border-slate-800/80' : 'bg-emerald-900/10 border-emerald-800/30'} backdrop-blur-xl border rounded-3xl p-8 shadow-2xl relative z-10 flex flex-col items-center transition-all duration-700`}>
+        {/* Header Section */}
+        <div className="flex flex-col items-center text-center mb-6">
+          {lockoutTime > 0 ? (
+            <div className="relative w-20 h-20 flex items-center justify-center mb-4">
+              {/* Circle Progress SVG */}
+              <svg className="absolute inset-0 w-full h-full -rotate-90" viewBox="0 0 100 100">
+                <circle
+                  cx="50"
+                  cy="50"
+                  r="42"
+                  className="stroke-slate-800"
+                  strokeWidth="6"
+                  fill="transparent"
+                />
+                <circle
+                  cx="50"
+                  cy="50"
+                  r="42"
+                  className="stroke-amber-500 transition-all duration-1000 ease-linear"
+                  strokeWidth="6"
+                  strokeLinecap="round"
+                  fill="transparent"
+                  strokeDasharray="263.9"
+                  strokeDashoffset={263.9 * (1 - lockoutTime / 60)}
+                />
+              </svg>
+
+              <div className="flex flex-col items-center justify-center text-white relative z-10">
+                <Lock className="h-4 w-4 text-amber-500 animate-pulse" />
+                <span className="text-xs font-black font-mono mt-0.5 text-amber-400">{lockoutTime}s</span>
+              </div>
             </div>
-            <p className="text-[10px] text-slate-400 font-mono">SECURE MANAGEMENT PANEL // PORTAL</p>
-          </div>
+          ) : (
+            <div className={`${role === 'SUPER_ADMIN' ? 'bg-gradient-to-tr from-indigo-600 to-purple-600 shadow-indigo-500/10' : 'bg-gradient-to-tr from-emerald-600 to-teal-600 shadow-emerald-500/10'} p-3.5 rounded-2xl text-white shadow-xl mb-4 animate-pulse transition-all duration-700`}>
+              {role === 'SUPER_ADMIN' ? <Shield className="h-7 w-7" /> : <Users className="h-7 w-7" />}
+            </div>
+          )}
+          <h2 className="text-xl font-black text-white tracking-tight mb-1">
+            {role === 'SUPER_ADMIN' ? '高級管理員登入' : '使用者登入'}
+          </h2>
+          <p className="text-[10px] text-slate-500 font-bold uppercase tracking-[0.2em]">
+            {role === 'SUPER_ADMIN' ? 'Advanced Admin Authentication' : 'Staff Access Portal'}
+          </p>
         </div>
 
-        {/* Super Admin Global Branch Context Switcher & Visual Status Card */}
-        {session.role === 'SUPER_ADMIN' && (
-          <div className="flex flex-col lg:flex-row items-stretch lg:items-center gap-3 bg-slate-900/60 p-2.5 rounded-2xl border border-indigo-950">
-            {/* Context Selector */}
-            <div className="flex items-center gap-2 px-2.5 py-1.5 bg-slate-950 border border-slate-850 rounded-xl">
-              <span className="text-[10.5px] font-black text-indigo-400 uppercase tracking-wide">
-                切換分店：
-              </span>
-              <select
-                value={currentTenantId}
-                onChange={(e) => setCurrentTenantId(e.target.value)}
-                className="bg-slate-950 border-none text-xs font-black text-white rounded-lg py-0.5 px-1 focus:outline-none cursor-pointer"
-              >
-                {tenants.map(t => (
-                  <option key={t.id} value={t.id}>
-                    {t.name}
-                  </option>
-                ))}
-              </select>
+        {/* Tab Switcher */}
+        <div className="flex w-full gap-2 p-1 bg-slate-950/50 rounded-2xl border border-slate-800/50 mb-8">
+          <button
+            type="button"
+            onClick={() => { setRole('SUPER_ADMIN'); setPin(''); setError(''); }}
+            disabled={isDisabled}
+            className={`flex-1 py-3.5 rounded-2xl border text-[11px] font-black transition-all flex flex-col items-center gap-1.5 cursor-pointer ${
+              role === 'SUPER_ADMIN'
+                ? 'bg-indigo-600/20 border-indigo-500/50 text-indigo-300 shadow-inner'
+                : 'bg-slate-950/40 border-slate-850 text-slate-500 hover:text-slate-300 hover:border-slate-800'
+            }`}
+          >
+            <Shield className="h-4.5 w-4.5" />
+            <span>高級管理員登入</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => { setRole('BRANCH_STAFF'); setPin(''); setBranchAccount('sabay'); setError(''); }}
+            disabled={isDisabled}
+            className={`flex-1 py-3.5 rounded-2xl border text-[11px] font-black transition-all flex flex-col items-center gap-1.5 cursor-pointer ${
+              role === 'BRANCH_STAFF'
+                ? 'bg-emerald-600/20 border-emerald-500/50 text-emerald-300 shadow-inner'
+                : 'bg-slate-950/40 border-slate-850 text-slate-500 hover:text-slate-300 hover:border-slate-800'
+            }`}
+          >
+            <Users className="h-4.5 w-4.5" />
+            <span>使用者登入</span>
+          </button>
+        </div>
+
+        {/* Dynamic Forms */}
+        {role === 'SUPER_ADMIN' ? (
+          <form onSubmit={handleAdminSubmit} className="w-full space-y-4 mb-5">
+            <div>
+              <label className="block text-[10px] text-slate-500 font-black mb-1.5 uppercase tracking-wider">高級管理員帳號 (Account)</label>
+              <input
+                type="text"
+                value={adminUsername}
+                onChange={(e) => { setError(''); setAdminUsername(e.target.value); }}
+                disabled={isDisabled}
+                placeholder="預設為 topztar"
+                className="w-full bg-slate-950 border border-slate-850 text-xs text-white font-medium rounded-xl py-3 px-4 focus:outline-none focus:border-indigo-500/80 transition-all placeholder-slate-700"
+              />
             </div>
 
-            {/* Active Tenant Visual Indicator Status Card */}
-            {(() => {
-              const activeTenant = tenants.find(t => t.id === currentTenantId) || tenants[0];
-              const branchUnsyncedJobs = queue.filter(job => {
-                let tenantId = 'DEFAULT';
-                if (job.payload?.tenantId) {
-                  tenantId = job.payload.tenantId;
-                } else if (job.url?.includes('/tenants/')) {
-                  tenantId = job.url.split('/tenants/')[1]?.split('/')[0] || 'DEFAULT';
-                }
-                return tenantId === currentTenantId;
-              });
-              const branchUnsyncedCount = branchUnsyncedJobs.length;
-              const isActuallyOnline = isOnline && !simulatedOffline;
+            <div>
+              <label className="block text-[10px] text-slate-500 font-black mb-1.5 uppercase tracking-wider">安全驗證密碼 (Password)</label>
+              <input
+                type="password"
+                value={adminPassword}
+                onChange={(e) => { setError(''); setAdminPassword(e.target.value); }}
+                disabled={isDisabled}
+                placeholder="預設為 888888"
+                className="w-full bg-slate-950 border border-slate-850 text-xs text-white font-medium rounded-xl py-3 px-4 focus:outline-none focus:border-indigo-500/80 transition-all placeholder-slate-700"
+              />
+            </div>
 
-              return (
-                <div className="flex items-center gap-3.5 px-3 py-1.5 bg-slate-950/80 rounded-xl border border-slate-850 text-xs">
-                  {/* Branch Details */}
-                  <div className="flex flex-col">
-                    <span className="font-black text-slate-100 flex items-center gap-1.5">
-                      <span className="h-1.5 w-1.5 rounded-full bg-indigo-400 animate-pulse" />
-                      {activeTenant?.name}
+            <div className="h-8 flex items-center justify-center text-center">
+              {lockoutTime > 0 ? (
+                <div className="flex items-center gap-2 text-[11px] text-amber-400 font-extrabold bg-amber-500/10 border border-amber-500/20 px-4 py-1 rounded-full">
+                  <span className="animate-spin h-3 w-3 border-2 border-amber-400 border-t-transparent rounded-full" />
+                  <span>鎖定中！請等待 {lockoutTime} 秒</span>
+                </div>
+              ) : error ? (
+                <div className="flex items-center gap-1.5 text-[11px] text-red-400 font-extrabold bg-red-500/10 border border-red-500/20 px-3.5 py-1 rounded-full">
+                  <AlertCircle className="h-3.5 w-3.5" />
+                  <span>{error}</span>
+                </div>
+              ) : (
+                <div className="flex items-center gap-1 text-[10px] text-slate-500 font-mono">
+                  <KeyRound className="h-3 w-3" />
+                  <span>管理員帳號登入系統</span>
+                </div>
+              )}
+            </div>
+
+            <button
+              type="submit"
+              disabled={isDisabled}
+              className="w-full py-3 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white font-black text-xs rounded-xl shadow-lg shadow-indigo-600/10 transition-all flex items-center justify-center gap-1.5 cursor-pointer"
+            >
+              <Check className="h-3.5 w-3.5" />
+              <span>進入管理控制台</span>
+            </button>
+
+            <div className="flex justify-center pt-2">
+              <button
+                type="button"
+                onClick={() => setShowForgotPinHelp(true)}
+                className="text-[11px] font-bold text-slate-500 hover:text-indigo-400 hover:underline transition-colors duration-200 cursor-pointer"
+              >
+                忘記帳密？ / Forgot Credentials?
+              </button>
+            </div>
+          </form>
+        ) : (
+          <div className="w-full flex flex-col items-center">
+            {/* Inner Sub-tab Switcher for BRANCH_STAFF */}
+            <div className="flex w-full gap-2 p-1 bg-slate-950/40 rounded-xl border border-slate-850/40 mb-5 text-[10.5px]">
+              <button
+                type="button"
+                onClick={() => { setBranchLoginSubMode('form'); setError(''); }}
+                className={`flex-1 py-2 rounded-lg font-bold transition-all text-center cursor-pointer ${
+                  branchLoginSubMode === 'form'
+                    ? 'bg-emerald-600/15 border border-emerald-500/30 text-emerald-300'
+                    : 'text-slate-500 hover:text-slate-300 border border-transparent'
+                }`}
+              >
+                帳號密碼登入
+              </button>
+              <button
+                type="button"
+                onClick={() => { setBranchLoginSubMode('pin'); setError(''); }}
+                className={`flex-1 py-2 rounded-lg font-bold transition-all text-center cursor-pointer flex items-center justify-center gap-1 ${
+                  branchLoginSubMode === 'pin'
+                    ? 'bg-emerald-600/15 border border-emerald-500/30 text-emerald-300'
+                    : 'text-slate-500 hover:text-slate-300 border border-transparent'
+                }`}
+              >
+                {!unlockedBranches[selectedBranchId] && <Lock className="h-3 w-3 text-slate-500" />}
+                <span>PIN 快速登入</span>
+              </button>
+            </div>
+
+            {branchLoginSubMode === 'form' ? (
+              <form onSubmit={handleBranchFormSubmit} className="w-full space-y-4 mb-5">
+                <div className="w-full">
+                  <label className="block text-[10px] text-slate-500 font-black mb-1.5 uppercase tracking-wider">選擇駐點店別 (Branch Target)</label>
+                  <select
+                    value={selectedBranchId}
+                    onChange={(e) => { setSelectedBranchId(e.target.value); setError(''); }}
+                    disabled={isDisabled}
+                    className="w-full bg-slate-950 border border-slate-800 text-xs font-black text-white rounded-xl py-2.5 px-3 focus:outline-none focus:border-emerald-500"
+                  >
+                    {tenants.map(t => (
+                      <option key={t.id} value={t.id}>{t.name}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-[10px] text-slate-500 font-black mb-1.5 uppercase tracking-wider">使用者帳號 (Username)</label>
+                  <input
+                    type="text"
+                    value={branchAccount}
+                    onChange={(e) => { setError(''); setBranchAccount(e.target.value); }}
+                    disabled={isDisabled}
+                    placeholder="預設為 sabay"
+                    className="w-full bg-slate-950 border border-slate-850 text-xs text-white font-medium rounded-xl py-3 px-4 focus:outline-none focus:border-emerald-500/80 transition-all placeholder-slate-700"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[10px] text-slate-500 font-black mb-1.5 uppercase tracking-wider">安全登入密碼 (Password/PIN)</label>
+                  <input
+                    type="password"
+                    value={branchPassword}
+                    onChange={(e) => { setError(''); setBranchPassword(e.target.value); }}
+                    disabled={isDisabled}
+                    placeholder="請輸入安全管理密碼或員工 PIN 碼"
+                    className="w-full bg-slate-950 border border-slate-850 text-xs text-white font-medium rounded-xl py-3 px-4 focus:outline-none focus:border-emerald-500/80 transition-all placeholder-slate-700"
+                  />
+                </div>
+
+                <div className="h-8 flex items-center justify-center text-center">
+                  {error ? (
+                    <div className="flex items-center gap-1.5 text-[11px] text-red-400 font-extrabold bg-red-500/10 border border-red-500/20 px-3.5 py-1 rounded-full">
+                      <AlertCircle className="h-3.5 w-3.5" />
+                      <span>{error}</span>
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-1 text-[10px] text-slate-500 font-mono">
+                      <KeyRound className="h-3 w-3" />
+                      <span>登入完成後將自動開啟分店 PIN 快速登入</span>
+                    </div>
+                  )}
+                </div>
+
+                <button
+                  type="submit"
+                  disabled={isDisabled}
+                  className="w-full py-3 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-black text-xs rounded-xl shadow-lg shadow-emerald-600/10 transition-all flex items-center justify-center gap-1.5 cursor-pointer"
+                >
+                  <Check className="h-3.5 w-3.5" />
+                  <span>登入使用者後台</span>
+                </button>
+              </form>
+            ) : (
+              !unlockedBranches[selectedBranchId] ? (
+                <div className="w-full py-5 text-center space-y-4">
+                  <div className="bg-amber-500/15 border border-amber-500/30 rounded-2xl p-4 text-xs text-amber-400 space-y-1.5 text-center max-w-sm mx-auto">
+                    <AlertTriangle className="h-6 w-6 text-amber-500 mx-auto mb-1 animate-bounce" />
+                    <h4 className="font-extrabold text-[11px] uppercase tracking-wide">此分店預設 PIN 碼快速登入尚未啟用</h4>
+                    <p className="leading-relaxed text-[10.5px] text-slate-400 pt-1">
+                      本系統安全機制要求：此分店必須先進行「帳號密碼登入」正確登入使用者帳密，後續才能開啟並使用分店預設 PIN 碼進行快速登入。
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => { setBranchLoginSubMode('form'); setError(''); }}
+                    className="px-4 py-2 bg-slate-900 border border-slate-800 hover:border-emerald-500/50 hover:bg-slate-850 text-emerald-400 text-xs font-bold rounded-xl transition-all cursor-pointer inline-flex items-center gap-1.5"
+                  >
+                    <KeyRound className="h-3.5 w-3.5" />
+                    <span>切換至帳號密碼登入</span>
+                  </button>
+                </div>
+              ) : (
+                <div className="w-full flex flex-col items-center">
+                  <div className="w-full mb-3 flex items-center justify-between gap-2">
+                    <span className="text-[10px] text-emerald-400 font-black uppercase tracking-wider flex items-center gap-1">
+                      <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse inline-block" />
+                      <span>分店裝置已啟用快速登入</span>
                     </span>
-                    <span className="text-[9.5px] text-slate-500 font-mono">
-                      分店編號：<span className="text-indigo-400 font-bold">{currentTenantId}</span>
-                    </span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        lockBranch(selectedBranchId);
+                        setPin('');
+                        setError('');
+                      }}
+                      className="text-[10px] font-bold text-rose-400 hover:text-rose-300 flex items-center gap-1 cursor-pointer hover:underline"
+                    >
+                      <Lock className="h-3 w-3" />
+                      <span>安全鎖定分店</span>
+                    </button>
                   </div>
 
-                  <span className="text-slate-800 text-[10px]">|</span>
+                  <div className="w-full mb-4">
+                    <label className="block text-[10px] text-slate-500 font-black mb-1.5 uppercase tracking-wider">選擇駐點店別 (Branch Target)</label>
+                    <select
+                      value={selectedBranchId}
+                      onChange={(e) => { setSelectedBranchId(e.target.value); setPin(''); setError(''); }}
+                      disabled={isDisabled}
+                      className="w-full bg-slate-950 border border-slate-800 text-xs font-black text-white rounded-xl py-2.5 px-3 focus:outline-none focus:border-emerald-500"
+                    >
+                      {tenants.map(t => (
+                        <option key={t.id} value={t.id}>{t.name}</option>
+                      ))}
+                    </select>
+                  </div>
 
-                  {/* Sync Status Badge */}
-                  <div className="flex items-center gap-2">
-                    {/* Mode (Online vs Offline) */}
-                    <span className={`text-[9.5px] px-2 py-0.5 rounded font-black border uppercase ${
-                      isActuallyOnline
-                        ? 'bg-emerald-950/40 text-emerald-400 border-emerald-900/30'
-                        : 'bg-red-950/40 text-red-400 border-red-900/30'
-                    }`}>
-                      {isActuallyOnline ? 'Live Sync' : 'Offline Cache'}
-                    </span>
+                  <div className="flex justify-center gap-3.5 mb-5">
+                    {[...Array(6)].map((_, i) => (
+                      <div
+                        key={i}
+                        className={`w-3.5 h-3.5 rounded-full transition-all duration-300 border ${
+                          lockoutTime > 0
+                            ? 'bg-slate-800 border-slate-700/60'
+                            : i < pin.length
+                              ? 'bg-emerald-500 border-emerald-400 shadow-lg shadow-emerald-500/50 scale-110'
+                              : 'bg-slate-950 border-slate-800'
+                        }`}
+                      />
+                    ))}
+                  </div>
 
-                    {/* Data Status */}
-                    {branchUnsyncedCount > 0 ? (
-                      <span className="text-[9.5px] bg-amber-950/50 text-amber-400 border border-amber-900/40 px-2 py-0.5 rounded font-bold animate-pulse flex items-center gap-1">
-                        <AlertTriangle className="h-3 w-3 text-amber-500" />
-                        <span>未同步 ({branchUnsyncedCount} 筆)</span>
-                      </span>
+                  <div className="h-8 mb-4 flex items-center justify-center text-center">
+                    {lockoutTime > 0 ? (
+                      <div className="flex items-center gap-2 text-[11px] text-amber-400 font-extrabold bg-amber-500/10 border border-amber-500/20 px-4 py-1 rounded-full">
+                        <span className="animate-spin h-3 w-3 border-2 border-amber-400 border-t-transparent rounded-full" />
+                        <span>鎖定中！請等待 {lockoutTime} 秒</span>
+                      </div>
+                    ) : error ? (
+                      <div className="flex items-center gap-1.5 text-[11px] text-red-400 font-extrabold bg-red-500/10 border border-red-500/20 px-3.5 py-1 rounded-full">
+                        <AlertCircle className="h-3.5 w-3.5" />
+                        <span>{error}</span>
+                      </div>
                     ) : (
-                      <span className="text-[9.5px] bg-slate-900 text-slate-400 border border-slate-850 px-2 py-0.5 rounded font-bold flex items-center gap-1">
-                        <Check className="h-3 w-3 text-emerald-500" />
-                        <span>數據同頻</span>
-                      </span>
+                      <div className="flex items-center gap-1 text-[10px] text-slate-500 font-mono">
+                        <KeyRound className="h-3 w-3" />
+                        <span>請輸入該分店 6 位數預設 PIN 碼</span>
+                      </div>
                     )}
                   </div>
+
+                  <div className="grid grid-cols-3 gap-3 w-full max-w-xs mb-6">
+                    {['1', '2', '3', '4', '5', '6', '7', '8', '9'].map((num) => (
+                      <button
+                        key={num}
+                        onClick={() => handleKeyPress(num)}
+                        disabled={isDisabled}
+                        type="button"
+                        className={`h-14 rounded-2xl bg-slate-950/40 border border-slate-850 text-white font-black text-lg transition-all flex items-center justify-center select-none ${
+                          isDisabled
+                            ? 'opacity-25 cursor-not-allowed bg-slate-950/10'
+                            : 'hover:bg-emerald-900/40 active:bg-emerald-800/60 cursor-pointer'
+                        }`}
+                      >
+                        {num}
+                      </button>
+                    ))}
+                    <button
+                      onClick={handleClear}
+                      disabled={isDisabled}
+                      type="button"
+                      className={`h-14 rounded-2xl text-slate-500 hover:text-slate-300 font-extrabold text-xs transition-all flex items-center justify-center select-none border border-transparent ${
+                        isDisabled ? 'opacity-25 cursor-not-allowed' : 'hover:bg-slate-800/20 cursor-pointer'
+                      }`}
+                    >
+                      清除
+                    </button>
+                    <button
+                      onClick={() => handleKeyPress('0')}
+                      disabled={isDisabled}
+                      type="button"
+                      className={`h-14 rounded-2xl bg-slate-950/40 border border-slate-850 text-white font-black text-lg transition-all flex items-center justify-center select-none ${
+                        isDisabled
+                          ? 'opacity-25 cursor-not-allowed bg-slate-950/10'
+                          : 'hover:bg-emerald-900/40 active:bg-emerald-800/60 cursor-pointer'
+                      }`}
+                    >
+                      0
+                    </button>
+                    <button
+                      onClick={handleBackspace}
+                      disabled={isDisabled}
+                      type="button"
+                      className={`h-14 rounded-2xl text-slate-500 hover:text-rose-400 transition-all flex items-center justify-center select-none border border-transparent ${
+                        isDisabled ? 'opacity-25 cursor-not-allowed' : 'hover:bg-rose-950/10 cursor-pointer'
+                      }`}
+                    >
+                      <Delete className="h-5 w-5" />
+                    </button>
+                  </div>
                 </div>
-              );
-            })()}
+              )
+            )}
           </div>
         )}
 
-        {/* Locked branch for Branch Staff */}
-        {session.role === 'BRANCH_STAFF' && (
-          <div className="flex items-center gap-2 px-3.5 py-1.5 bg-slate-900/65 border border-slate-800 rounded-2xl">
-            <span className="text-[10px] text-slate-400 font-black uppercase">當前駐店：</span>
-            <span className="text-xs font-black text-emerald-400">{session.branchName}</span>
-          </div>
-        )}
-
-        {/* Offline Sync Notification Status Indicator */}
-        <div className="flex items-center gap-2.5 px-3.5 py-1.5 bg-slate-900/60 border border-slate-800 rounded-2xl">
-          <div className="relative flex items-center justify-center">
-            {hasUnsyncedData ? (
-              <>
-                <span className="flex h-3 w-3 rounded-full bg-red-500 animate-pulse" />
-                <span className="animate-ping absolute inline-flex h-4 w-4 rounded-full bg-red-500 opacity-75" />
-              </>
-            ) : (
-              <span className="flex h-2.5 w-2.5 rounded-full bg-emerald-500" />
-            )}
-          </div>
-          <div className="flex flex-col">
-            <div className="flex items-center gap-1.5">
-              {hasUnsyncedData ? (
-                <>
-                  <WifiOff className="h-3.5 w-3.5 text-red-500 animate-bounce" />
-                  <span className="text-xs font-black text-red-400">未同步離線 ({queue.length} 筆)</span>
-                </>
-              ) : (
-                <>
-                  <Database className="h-3.5 w-3.5 text-slate-400" />
-                  <span className="text-xs font-bold text-slate-400">數據已同步</span>
-                </>
-              )}
-            </div>
-          </div>
-        </div>
-        
-        <div className="flex items-center gap-3">
-          {/* Fullscreen Button */}
-          <button
-            onClick={toggleFullscreen}
-            className="flex items-center gap-1.5 px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-white rounded-xl text-xs font-bold transition-all border border-slate-700 cursor-pointer"
-            title="切換全螢幕模式"
-          >
-            {isFullscreen ? (
-              <>
-                <Minimize className="h-3.5 w-3.5 text-indigo-400" />
-                <span>退出全螢幕</span>
-              </>
-            ) : (
-              <>
-                <Maximize className="h-3.5 w-3.5 text-indigo-400" />
-                <span>全螢幕模式</span>
-              </>
-            )}
-          </button>
-
-          {/* Logout Button */}
-          <button
-            onClick={logoutSession}
-            className="flex items-center gap-1.5 px-4.5 py-2 bg-red-600/10 hover:bg-red-600 text-red-500 hover:text-white rounded-xl text-xs font-bold transition-all border border-red-500/20 cursor-pointer"
-          >
-            <Lock className="h-3.5 w-3.5" />
-            <span>安全登出</span>
-          </button>
-
-          {/* Back to Customer Link */}
-          <Link 
-            to="/" 
-            onClick={(e) => {
-              if (queue.length > 0) {
-                e.preventDefault();
-                setShowLogoutConfirm(true);
-              } else {
-                rawLogoutSession();
-              }
-            }}
-            className="flex items-center gap-1.5 px-4.5 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-white rounded-xl text-xs font-bold transition-all border border-slate-700 cursor-pointer"
-          >
-            <ArrowLeft className="h-3.5 w-3.5" />
-            <span>返回點餐前台</span>
-          </Link>
-        </div>
+        <Link
+          to="/"
+          className="mt-2 text-[10.5px] font-bold text-slate-600 hover:text-slate-400 transition-all flex items-center gap-1 py-1.5 px-3 rounded-lg hover:bg-slate-900/50"
+        >
+          <ArrowLeft className="h-3.5 w-3.5" />
+          <span>返回點餐前台</span>
+        </Link>
+      </div>
       </header>
 
       {/* Main Content Area */}

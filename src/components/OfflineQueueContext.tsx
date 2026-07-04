@@ -1,9 +1,12 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { collection, addDoc, doc, updateDoc, onSnapshot, getDocs, setDoc, query, deleteDoc } from 'firebase/firestore';
-import { db } from '../firebase';
+import { db, auth } from '../firebase';
 import { MenuItem, CartItem, Order, QueueJob, Tenant, SyncLogEntry, UserSession, UserRole, UserAccount } from '../types';
 
 interface OfflineQueueContextType {
+  unlockedBranches: Record<string, number>;
+  unlockBranch: (branchId: string) => void;
+  lockBranch: (branchId: string) => void;
   isOnline: boolean;
   simulatedOffline: boolean;
   setSimulatedOffline: (sim: boolean) => void;
@@ -177,6 +180,63 @@ const DEFAULT_TENANTS: Tenant[] = [
 ];
 
 export const OfflineQueueProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const [unlockedBranches, setUnlockedBranches] = useState<Record<string, number>>(() => {
+    try {
+      const stored = localStorage.getItem('sabay_unlocked_branches');
+      if (!stored) return {};
+      const parsed = JSON.parse(stored);
+      const now = Date.now();
+      const valid: Record<string, number> = {};
+      Object.entries(parsed).forEach(([id, expiresAt]) => {
+        if (typeof expiresAt === 'number' && expiresAt > now) {
+          valid[id] = expiresAt;
+        }
+      });
+      return valid;
+    } catch { return {}; }
+  });
+
+  const unlockBranch = (branchId: string) => {
+    const expiresAt = Date.now() + 60 * 60 * 1000;
+    const next = { ...unlockedBranches, [branchId]: expiresAt };
+    setUnlockedBranches(next);
+    localStorage.setItem('sabay_unlocked_branches', JSON.stringify(next));
+  };
+
+  const lockBranch = (branchId: string) => {
+    const next = { ...unlockedBranches };
+    delete next[branchId];
+    setUnlockedBranches(next);
+    localStorage.setItem('sabay_unlocked_branches', JSON.stringify(next));
+  };
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      const now = Date.now();
+      let changed = false;
+      const next = { ...unlockedBranches };
+      Object.entries(next).forEach(([id, expiresAt]) => {
+        if (expiresAt < now) {
+          delete next[id];
+          changed = true;
+        }
+      });
+      if (changed) {
+        setUnlockedBranches(next);
+        localStorage.setItem('sabay_unlocked_branches', JSON.stringify(next));
+      }
+    }, 60000);
+    return () => clearInterval(interval);
+  }, [unlockedBranches]);
+
+
+  useEffect(() => {
+    const unsubscribe = auth.onAuthStateChanged((user) => {
+      if (user) console.log('[Auth] Firebase user logged in');
+    });
+    return () => unsubscribe();
+  }, []);
+
   const [isOnline, setIsOnline] = useState<boolean>(navigator.onLine);
   const [simulatedOffline, setSimulatedOfflineState] = useState<boolean>(() => {
     return localStorage.getItem('sim_offline') === 'true';
@@ -776,30 +836,17 @@ export const OfflineQueueProvider: React.FC<{ children: React.ReactNode }> = ({ 
     const inputUsername = (username || '').trim().toLowerCase();
 
     if (role === 'SUPER_ADMIN') {
-      // 1. Hardcoded Advanced Admin Login (custom or topztar / dynamic adminPin or 888888)
       const storedAdminUsername = localStorage.getItem('sabay_thai_admin_username') || 'topztar';
       const storedAdminPin = localStorage.getItem('sabay_thai_admin_pin') || '888888';
       if (inputUsername === storedAdminUsername.toLowerCase() && pin === storedAdminPin) {
-        const adminSession: UserSession = {
-          role: 'SUPER_ADMIN',
-          branchId: 'ALL',
-          branchName: 'Super Admin Master Node'
-        };
+        const adminSession: UserSession = { role: 'SUPER_ADMIN', branchId: 'ALL', branchName: 'Super Admin Master Node' };
         setSession(adminSession);
         sessionStorage.setItem('sabay_thai_user_session', JSON.stringify(adminSession));
         return true;
       }
-
-      // 1b. Support custom SUPER_ADMIN accounts in users list (via account & password form)
-      const matchedUser = users.find(
-        (u) => u.username.toLowerCase() === inputUsername && u.pin === pin && u.role === 'SUPER_ADMIN'
-      );
+      const matchedUser = users.find(u => u.username.toLowerCase() === inputUsername && u.pin === pin && u.role === 'SUPER_ADMIN');
       if (matchedUser) {
-        const adminSession: UserSession = {
-          role: 'SUPER_ADMIN',
-          branchId: 'ALL',
-          branchName: 'Super Admin Master Node'
-        };
+        const adminSession: UserSession = { role: 'SUPER_ADMIN', branchId: 'ALL', branchName: 'Super Admin Master Node' };
         setSession(adminSession);
         sessionStorage.setItem('sabay_thai_user_session', JSON.stringify(adminSession));
         return true;
@@ -807,16 +854,16 @@ export const OfflineQueueProvider: React.FC<{ children: React.ReactNode }> = ({ 
       return false;
     }
 
-    // BRANCH_STAFF login (User Login)
-    // 2. Hardcoded User Login (sabay / 952700)
+    const isPinOnly = !inputUsername || inputUsername === 'sabay';
+    if (isPinOnly && !unlockedBranches[branchId]) {
+      console.warn('[Auth] Branch must be unlocked via account/password first.');
+      return false;
+    }
+
     if (inputUsername === 'sabay' && pin === '952700') {
       const branch = tenants.find(t => t.id === branchId) || tenants[0];
       if (branch) {
-        const staffSession: UserSession = {
-          role: 'BRANCH_STAFF',
-          branchId: branch.id,
-          branchName: branch.name
-        };
+        const staffSession: UserSession = { role: 'BRANCH_STAFF', branchId: branch.id, branchName: branch.name };
         setSession(staffSession);
         sessionStorage.setItem('sabay_thai_user_session', JSON.stringify(staffSession));
         setCurrentTenantId(branch.id);
@@ -824,16 +871,11 @@ export const OfflineQueueProvider: React.FC<{ children: React.ReactNode }> = ({ 
       }
     }
 
-    // 2b. Branch-specific default PIN quick login (e.g. 111111 for DEFAULT) matching
     const branch = tenants.find(t => t.id === branchId) || tenants[0];
     if (branch) {
       const defaultBranchPin = branch.pin || (branchId === 'DEFAULT' ? '111111' : branchId === 'EAST_BRANCH' ? '222222' : '333333');
-      if ((inputUsername === 'sabay' || !inputUsername) && pin === defaultBranchPin) {
-        const staffSession: UserSession = {
-          role: 'BRANCH_STAFF',
-          branchId: branch.id,
-          branchName: branch.name
-        };
+      if (isPinOnly && pin === defaultBranchPin) {
+        const staffSession: UserSession = { role: 'BRANCH_STAFF', branchId: branch.id, branchName: branch.name };
         setSession(staffSession);
         sessionStorage.setItem('sabay_thai_user_session', JSON.stringify(staffSession));
         setCurrentTenantId(branch.id);
@@ -841,38 +883,30 @@ export const OfflineQueueProvider: React.FC<{ children: React.ReactNode }> = ({ 
       }
     }
 
-    // 3. Dynamic User Account database login matching
-    const matchedUser = users.find(
-      (u) => u.username.toLowerCase() === inputUsername && u.pin === pin
-    );
+    const matchedUser = users.find(u => u.username.toLowerCase() === inputUsername && u.pin === pin);
     if (matchedUser) {
-      if (matchedUser.role === 'SUPER_ADMIN') {
-        // Enforce that SUPER_ADMIN accounts cannot use the branch PIN quick login portal
-        return false;
-      }
+      if (matchedUser.role === 'SUPER_ADMIN') return false;
       const branchIdToUse = matchedUser.tenantId === 'ALL' ? branchId : matchedUser.tenantId;
-      const branch = tenants.find((t) => t.id === branchIdToUse) || tenants[0];
-      if (branch) {
-        const customSession: UserSession = {
-          role: matchedUser.role,
-          branchId: branch.id,
-          branchName: branch.name
-        };
+      const b = tenants.find(t => t.id === branchIdToUse) || tenants[0];
+      if (b) {
+        const customSession: UserSession = { role: matchedUser.role, branchId: b.id, branchName: b.name };
         setSession(customSession);
         sessionStorage.setItem('sabay_thai_user_session', JSON.stringify(customSession));
-        setCurrentTenantId(branch.id);
+        setCurrentTenantId(b.id);
         return true;
       }
     }
-
     return false;
   };
 
   const logoutSession = () => {
+    if (session && session.branchId && session.branchId !== 'ALL') {
+      lockBranch(session.branchId);
+    }
     setSession(null);
     sessionStorage.removeItem('sabay_thai_user_session');
     localStorage.removeItem('sabay_thai_user_session');
-  };
+  };;
 
   const addUserAccount = async (user: UserAccount) => {
     const updated = [...users, user];

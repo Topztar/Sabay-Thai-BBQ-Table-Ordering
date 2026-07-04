@@ -1,3 +1,4 @@
+import threading
 import time
 import logging
 from google.cloud import firestore
@@ -11,6 +12,7 @@ class SyncEngine:
         self.local_session = get_db()
         self.hw = hw_manager
         self.logger = logging.getLogger("SyncEngine")
+        self.lock = threading.Lock()
 
     def start_listening(self):
         # 監聽 Firestore 中的訂單集合
@@ -30,26 +32,33 @@ class SyncEngine:
                 self.save_local(order_id, order_data)
 
     def save_local(self, order_id, data):
-        try:
-            new_order = LocalOrder(
-                order_id=order_id,
-                table_id=data.get('table_id'),
-                total_amount=data.get('total_amount'),
-                status='pending'
-            )
-            self.local_session.add(new_order)
-            self.local_session.commit()
+        with self.lock:
+            # Idempotency check: verify if order already exists in local cache
+            existing = self.local_session.query(LocalOrder).filter_by(order_id=order_id).first()
+            if existing:
+                self.logger.info(f"Order {order_id} already exists locally, skipping sync.")
+                return
 
-            # 觸發硬體列印與開啟錢箱
-            if self.hw:
-                self.logger.info(f"Triggering hardware sequence for order: {order_id}")
-                self.hw.print_receipt({
-                    "order_id": order_id,
-                    "table_id": data.get('table_id'),
-                    "total": data.get('total_amount'),
-                    "items": data.get('items', []),
-                    "time": str(data.get('timestamp', 'N/A'))
-                })
-        except Exception as e:
-            self.logger.error(f"Error in save_local / hardware trigger: {e}")
-            self.local_session.rollback()
+            try:
+                new_order = LocalOrder(
+                    order_id=order_id,
+                    table_id=data.get('table_id'),
+                    total_amount=data.get('total_amount'),
+                    status='pending'
+                )
+                self.local_session.add(new_order)
+                self.local_session.commit()
+
+                # 觸發硬體列印與開啟錢箱
+                if self.hw:
+                    self.logger.info(f"Triggering hardware sequence for order: {order_id}")
+                    self.hw.print_receipt({
+                        "order_id": order_id,
+                        "table_id": data.get('table_id'),
+                        "total": data.get('total_amount'),
+                        "items": data.get('items', []),
+                        "time": str(data.get('timestamp', 'N/A'))
+                    })
+            except Exception as e:
+                self.logger.error(f"Error in save_local / hardware trigger: {e}")
+                self.local_session.rollback()
