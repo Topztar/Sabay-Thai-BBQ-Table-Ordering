@@ -11,7 +11,7 @@ app.use(cors());
 app.use(express.json());
 
 // Hardware Config State
-let defaultPrinterConfig: HardwarePrinterConfig = {
+const defaultPrinterConfig: HardwarePrinterConfig = {
   connectionType: 'serial',
   portName: 'COM1',
   baudRate: 9600,
@@ -51,11 +51,14 @@ app.get('/windows/status', async (req, res) => {
       },
       hardware: {
         printerConfig: defaultPrinterConfig,
-        availableComPorts: availablePorts.map(p => ({ path: p.path, manufacturer: p.manufacturer })),
+        availableComPorts: availablePorts.map((p) => ({
+          path: p.path,
+          manufacturer: p.manufacturer,
+        })),
       },
       queue: {
         totalJobs: printQueue.length,
-        pendingJobs: printQueue.filter(j => j.status === 'PENDING').length,
+        pendingJobs: printQueue.filter((j) => j.status === 'PENDING').length,
         isPrinting,
       },
       timestamp: new Date().toISOString(),
@@ -77,8 +80,9 @@ app.get('/windows/com-ports', async (req, res) => {
 
 // 3. Update Hardware Printer Config
 app.post('/windows/config/printer', (req, res) => {
-  const { connectionType, portName, baudRate, ipAddress, tcpPort, paperWidthMm, characterSet } = req.body;
-  
+  const { connectionType, portName, baudRate, ipAddress, tcpPort, paperWidthMm, characterSet } =
+    req.body;
+
   if (connectionType) defaultPrinterConfig.connectionType = connectionType;
   if (portName) defaultPrinterConfig.portName = portName;
   if (baudRate) defaultPrinterConfig.baudRate = Number(baudRate);
@@ -99,7 +103,9 @@ app.post('/windows/print', async (req, res) => {
   const { tableNumber, items, totalAmount } = req.body;
 
   if (!tableNumber || !items || !Array.isArray(items)) {
-    return res.status(400).json({ success: false, error: 'Invalid print job data. Require tableNumber and items.' });
+    return res
+      .status(400)
+      .json({ success: false, error: 'Invalid print job data. Require tableNumber and items.' });
   }
 
   const newJob: WindowsPrintJob = {
@@ -133,7 +139,7 @@ app.get('/windows/print-queue', (req, res) => {
 // Worker to process print queue
 async function processPrintQueue() {
   if (isPrinting) return;
-  const nextJob = printQueue.find(j => j.status === 'PENDING');
+  const nextJob = printQueue.find((j) => j.status === 'PENDING');
   if (!nextJob) return;
 
   isPrinting = true;
@@ -142,7 +148,7 @@ async function processPrintQueue() {
   try {
     const receiptText = generateReceiptText(nextJob);
     const printResult = await executePrintJob(receiptText, defaultPrinterConfig);
-    
+
     if (printResult.success) {
       nextJob.status = 'SUCCESS';
     } else {
@@ -166,7 +172,7 @@ function generateReceiptText(job: WindowsPrintJob): string {
   text += `Table: ${job.tableNumber}\n`;
   text += `Time: ${new Date(job.createdAt).toLocaleString()}\n`;
   text += `--------------------------------\n`;
-  job.items.forEach(item => {
+  job.items.forEach((item) => {
     text += `${item.name} x${item.quantity}  $${item.price * item.quantity}\n`;
     if (item.notes) {
       text += `  * Notes: ${item.notes}\n`;

@@ -59,7 +59,7 @@ export default function PrintLogsD3Chart({ printLogs, onRefresh }: PrintLogsD3Ch
     printLogs.forEach((log) => {
       // 1. Extract Hour from Log
       let logHour = 18; // fallback to default restaurant start hour
-      
+
       // Try parsing from content line e.g., "時間: 19:35:12"
       const content = log.content || '';
       const timeMatch = content.match(/(?:時間|TIME):\s*(\d{1,2}):(\d{2})/i);
@@ -121,7 +121,7 @@ export default function PrintLogsD3Chart({ printLogs, onRefresh }: PrintLogsD3Ch
     // We focus visualization on the business busy hours: 16:00 (4:00 PM) to 01:00 (1:00 AM next day)
     // plus any other hours where transactions actually occurred to keep chart concise and zero clutter
     const activeHours = [17, 18, 19, 20, 21, 22, 23, 0, 1];
-    
+
     // Add any other hours that have actual metrics
     const otherHoursWithData: number[] = [];
     for (let h = 0; h < 24; h++) {
@@ -150,7 +150,10 @@ export default function PrintLogsD3Chart({ printLogs, onRefresh }: PrintLogsD3Ch
 
   // Total calculated metrics
   const totalRev = React.useMemo(() => hourlyData.reduce((s, d) => s + d.revenue, 0), [hourlyData]);
-  const totalOrders = React.useMemo(() => hourlyData.reduce((s, d) => s + d.orderCount, 0), [hourlyData]);
+  const totalOrders = React.useMemo(
+    () => hourlyData.reduce((s, d) => s + d.orderCount, 0),
+    [hourlyData],
+  );
 
   // Draw chart in D3 hook
   useEffect(() => {
@@ -168,9 +171,7 @@ export default function PrintLogsD3Chart({ printLogs, onRefresh }: PrintLogsD3Ch
       .attr('width', dimensions.width)
       .attr('height', dimensions.height);
 
-    const g = svg
-      .append('g')
-      .attr('transform', `translate(${margin.left},${margin.top})`);
+    const g = svg.append('g').attr('transform', `translate(${margin.left},${margin.top})`);
 
     // 1. Define Scales
     const xScale = d3
@@ -195,7 +196,7 @@ export default function PrintLogsD3Chart({ printLogs, onRefresh }: PrintLogsD3Ch
 
     // 2. Linear Gradients definitions
     const defs = svg.append('defs');
-    
+
     // Revenue bar gradient
     const barGradient = defs
       .append('linearGradient')
@@ -205,8 +206,16 @@ export default function PrintLogsD3Chart({ printLogs, onRefresh }: PrintLogsD3Ch
       .attr('x2', '0%')
       .attr('y2', '100%');
 
-    barGradient.append('stop').attr('offset', '0%').attr('stop-color', '#F59E0B').attr('stop-opacity', 0.85);
-    barGradient.append('stop').attr('offset', '100%').attr('stop-color', '#D97706').attr('stop-opacity', 0.15);
+    barGradient
+      .append('stop')
+      .attr('offset', '0%')
+      .attr('stop-color', '#F59E0B')
+      .attr('stop-opacity', 0.85);
+    barGradient
+      .append('stop')
+      .attr('offset', '100%')
+      .attr('stop-color', '#D97706')
+      .attr('stop-opacity', 0.15);
 
     // Peak orders line shadow effect
     const filter = defs
@@ -217,10 +226,7 @@ export default function PrintLogsD3Chart({ printLogs, onRefresh }: PrintLogsD3Ch
       .attr('width', '140%')
       .attr('height', '140%');
 
-    filter
-      .append('feGaussianBlur')
-      .attr('stdDeviation', 2.5)
-      .attr('result', 'blur');
+    filter.append('feGaussianBlur').attr('stdDeviation', 2.5).attr('result', 'blur');
 
     filter
       .append('feMerge')
@@ -237,7 +243,7 @@ export default function PrintLogsD3Chart({ printLogs, onRefresh }: PrintLogsD3Ch
         d3
           .axisLeft(yScaleLeft)
           .tickSize(-chartWidth)
-          .tickFormat(() => '')
+          .tickFormat(() => ''),
       )
       .call((g) => g.select('.domain').remove())
       .selectAll('.tick line')
@@ -261,7 +267,7 @@ export default function PrintLogsD3Chart({ printLogs, onRefresh }: PrintLogsD3Ch
         d3
           .axisLeft(yScaleLeft)
           .ticks(5)
-          .tickFormat((d) => `NT$${d}`)
+          .tickFormat((d) => `NT$${d}`),
       )
       .call((g) => g.select('.domain').remove())
       .selectAll('.tick line')
@@ -278,7 +284,7 @@ export default function PrintLogsD3Chart({ printLogs, onRefresh }: PrintLogsD3Ch
         d3
           .axisRight(yScaleRight)
           .ticks(5)
-          .tickFormat((d) => `${d}單`)
+          .tickFormat((d) => `${d}單`),
       )
       .call((g) => g.select('.domain').remove())
       .selectAll('.tick line')
@@ -304,9 +310,7 @@ export default function PrintLogsD3Chart({ printLogs, onRefresh }: PrintLogsD3Ch
       .style('cursor', 'pointer')
       .style('transition', 'all 0.2s')
       .on('mouseover', function (event, d) {
-        d3.select(this)
-          .attr('fill', '#FBBF24')
-          .attr('opacity', 1);
+        d3.select(this).attr('fill', '#FBBF24').attr('opacity', 1);
 
         const [x, y] = d3.pointer(event, svg.node());
         setTooltipData(d);
@@ -317,9 +321,7 @@ export default function PrintLogsD3Chart({ printLogs, onRefresh }: PrintLogsD3Ch
         setTooltipPos({ x: x + 15, y: y - 55 });
       })
       .on('mouseout', function () {
-        d3.select(this)
-          .attr('fill', 'url(#revenue-bar-grad)')
-          .attr('opacity', 0.95);
+        d3.select(this).attr('fill', 'url(#revenue-bar-grad)').attr('opacity', 0.95);
         setTooltipData(null);
         setTooltipPos(null);
       });
@@ -370,9 +372,7 @@ export default function PrintLogsD3Chart({ printLogs, onRefresh }: PrintLogsD3Ch
       .attr('stroke-width', 2)
       .style('cursor', 'pointer')
       .on('mouseover', function (event, d) {
-        d3.select(this)
-          .attr('r', 6.5)
-          .attr('fill', '#34D399');
+        d3.select(this).attr('r', 6.5).attr('fill', '#34D399');
 
         const [x, y] = d3.pointer(event, svg.node());
         setTooltipData(d);
@@ -383,26 +383,28 @@ export default function PrintLogsD3Chart({ printLogs, onRefresh }: PrintLogsD3Ch
         setTooltipPos({ x: x + 15, y: y - 55 });
       })
       .on('mouseout', function () {
-        d3.select(this)
-          .attr('r', 4.5)
-          .attr('fill', '#111827');
+        d3.select(this).attr('r', 4.5).attr('fill', '#111827');
         setTooltipData(null);
         setTooltipPos(null);
       });
-
   }, [hourlyData, dimensions]);
 
   return (
-    <div className="bg-[#161616] border border-white/10 rounded-xl p-5 shadow-sm space-y-4 text-left" id="d3-hourly-analytics-card">
+    <div
+      className="bg-[#161616] border border-white/10 rounded-xl p-5 shadow-sm space-y-4 text-left"
+      id="d3-hourly-analytics-card"
+    >
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 border-b border-white/5 pb-3">
         <div className="space-y-0.5">
           <h4 className="font-bold text-sm text-white flex items-center gap-2">
             <span className="text-amber-400">📊</span>
             <span>D3 時段營業額與熱門點餐尖峰 (D3 Hourly Revenue & Peak Volume)</span>
           </h4>
-          <p className="text-white/40 text-[10px]">自動由近期熱感印表快取緩衝匯流排分析，交叉統計出單時段分佈</p>
+          <p className="text-white/40 text-[10px]">
+            自動由近期熱感印表快取緩衝匯流排分析，交叉統計出單時段分佈
+          </p>
         </div>
-        
+
         {onRefresh && (
           <button
             type="button"
@@ -425,12 +427,20 @@ export default function PrintLogsD3Chart({ printLogs, onRefresh }: PrintLogsD3Ch
           {/* Legend and High Levels stats breakdown */}
           <div className="grid grid-cols-3 gap-3.5 bg-black/25 p-3 rounded-lg border border-white/5 text-[10.5px]">
             <div className="text-left">
-              <span className="text-zinc-400 block text-[9px] uppercase font-mono">Spool Rev 計入總額</span>
-              <span className="font-mono text-xs font-black text-amber-400">NT$ {totalRev.toLocaleString()}</span>
+              <span className="text-zinc-400 block text-[9px] uppercase font-mono">
+                Spool Rev 計入總額
+              </span>
+              <span className="font-mono text-xs font-black text-amber-400">
+                NT$ {totalRev.toLocaleString()}
+              </span>
             </div>
             <div className="text-left">
-              <span className="text-zinc-400 block text-[9px] uppercase font-mono">Spool Bills 件數</span>
-              <span className="font-mono text-xs font-black text-emerald-400">{totalOrders} 筆單據</span>
+              <span className="text-zinc-400 block text-[9px] uppercase font-mono">
+                Spool Bills 件數
+              </span>
+              <span className="font-mono text-xs font-black text-emerald-400">
+                {totalOrders} 筆單據
+              </span>
             </div>
             <div className="flex flex-col items-end justify-center space-y-1">
               <div className="flex items-center gap-1 text-[9px]">
@@ -445,9 +455,12 @@ export default function PrintLogsD3Chart({ printLogs, onRefresh }: PrintLogsD3Ch
           </div>
 
           {/* D3 Graphic Canvas with React Tooltip anchor */}
-          <div ref={containerRef} className="relative w-full overflow-hidden select-none bg-black/10 rounded-lg pt-1">
+          <div
+            ref={containerRef}
+            className="relative w-full overflow-hidden select-none bg-black/10 rounded-lg pt-1"
+          >
             <svg ref={svgRef} className="mx-auto block overflow-visible" />
-            
+
             {/* Elegant tooltips */}
             {tooltipData && tooltipPos && (
               <div
@@ -459,16 +472,23 @@ export default function PrintLogsD3Chart({ printLogs, onRefresh }: PrintLogsD3Ch
                 }}
               >
                 <div className="font-mono font-black text-[#E5B453] border-b border-white/5 pb-1 flex items-center justify-between gap-3 text-[10px]">
-                  <span>⏰ 區間 {tooltipData.hourLabel} - {String((tooltipData.hour + 1) % 24).padStart(2,'0')}:00</span>
+                  <span>
+                    ⏰ 區間 {tooltipData.hourLabel} -{' '}
+                    {String((tooltipData.hour + 1) % 24).padStart(2, '0')}:00
+                  </span>
                 </div>
                 <div className="space-y-0.5 text-[11px] pt-1">
                   <p className="text-zinc-400 flex justify-between gap-4">
                     <span>時段營業額:</span>
-                    <span className="font-mono font-bold text-amber-400">NT$ {(tooltipData.revenue || 0).toLocaleString()}</span>
+                    <span className="font-mono font-bold text-amber-400">
+                      NT$ {(tooltipData.revenue || 0).toLocaleString()}
+                    </span>
                   </p>
                   <p className="text-zinc-400 flex justify-between gap-4">
                     <span>單時成交單數:</span>
-                    <span className="font-mono font-bold text-emerald-400">{tooltipData.orderCount} 單</span>
+                    <span className="font-mono font-bold text-emerald-400">
+                      {tooltipData.orderCount} 單
+                    </span>
                   </p>
                 </div>
               </div>

@@ -4603,15 +4603,7 @@
         "start": "11:00",
         "end": "14:30",
         "id": "oh-1",
-        "days": [
-          0,
-          1,
-          2,
-          3,
-          4,
-          5,
-          6
-        ],
+        "days": [0, 1, 2, 3, 4, 5, 6],
         "isActive": false,
         "name": "午餐時段 Lunch Session",
         "isReservableOnly": false
@@ -4621,28 +4613,12 @@
         "isActive": true,
         "name": "晚餐時段 Dinner Session",
         "start": "17:30",
-        "days": [
-          0,
-          1,
-          2,
-          3,
-          4,
-          5,
-          6
-        ],
+        "days": [0, 1, 2, 3, 4, 5, 6],
         "id": "oh-2",
         "isReservableOnly": false
       },
       {
-        "days": [
-          0,
-          1,
-          2,
-          3,
-          4,
-          5,
-          6
-        ],
+        "days": [0, 1, 2, 3, 4, 5, 6],
         "id": "oh-manual-1785135298026",
         "name": "調整用",
         "isActive": false,
@@ -4652,15 +4628,7 @@
       },
       {
         "id": "oh-res-1785135317557",
-        "days": [
-          0,
-          1,
-          2,
-          3,
-          4,
-          5,
-          6
-        ],
+        "days": [0, 1, 2, 3, 4, 5, 6],
         "isActive": true,
         "name": "預約專用",
         "isReservableOnly": true,
@@ -4669,9 +4637,7 @@
       }
     ],
     "liveStaffPin": "952788",
-    "liveRestDays": [
-      "2026-07-26"
-    ],
+    "liveRestDays": ["2026-07-26"],
     "liveMinSpendPerPerson": 500,
     "livePromoCombo": {
       "requiredQty": 10,

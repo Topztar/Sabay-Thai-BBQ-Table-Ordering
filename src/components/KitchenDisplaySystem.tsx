@@ -1,10 +1,41 @@
-import { apiFetch } from "../lib/api";
+import { apiFetch } from '../lib/api';
 import React, { useState, useEffect, useRef } from 'react';
-import { Order, OrderStatus, Language, TableConfig, MenuItem, Category, Ingredient, Reservation } from '../types';
+import {
+  Order,
+  OrderStatus,
+  Language,
+  TableConfig,
+  MenuItem,
+  Category,
+  Ingredient,
+  Reservation,
+} from '../types';
 import { getLocalizedText } from '../utils/i18n';
 import { TRANSLATIONS } from '../data';
 import { safeStorage } from '../lib/safeStorage';
-import { ChefHat, Printer, Trash2, Check, Ban, RefreshCw, Volume2, Wifi, Edit, Settings, X, Clock, AlertTriangle, Mic, Flag, Eye, Search, Timer, Download, ChevronUp, ChevronDown } from 'lucide-react';
+import {
+  ChefHat,
+  Printer,
+  Trash2,
+  Check,
+  Ban,
+  RefreshCw,
+  Volume2,
+  Wifi,
+  Edit,
+  Settings,
+  X,
+  Clock,
+  AlertTriangle,
+  Mic,
+  Flag,
+  Eye,
+  Search,
+  Timer,
+  Download,
+  ChevronUp,
+  ChevronDown,
+} from 'lucide-react';
 
 import { KdsHourlyChart } from './KdsHourlyChart';
 import { useRetry } from '../hooks/useRetry';
@@ -18,16 +49,32 @@ interface KitchenDisplaySystemProps {
   onClearPrintLogs: () => Promise<void>;
   printerIp: string;
   onUpdatePrinterIp: (ip: string) => Promise<{ success: boolean; error?: string }>;
-  onPrintTestPage: (target?: 'kitchen' | 'bill' | 'all') => Promise<{ success: boolean; error?: string }>;
-  onUpdateTableNumber?: (orderId: string, tableNumber: string) => Promise<{ success: boolean; error?: string }>;
-  onUpdateQuickNotes?: (orderId: string, quickNotes: string) => Promise<{ success: boolean; error?: string }>;
-  onToggleOrderFlag?: (orderId: string, isFlagged: boolean, flagReason: string) => Promise<{ success: boolean; error?: string }>;
+  onPrintTestPage: (
+    target?: 'kitchen' | 'bill' | 'all',
+  ) => Promise<{ success: boolean; error?: string }>;
+  onUpdateTableNumber?: (
+    orderId: string,
+    tableNumber: string,
+  ) => Promise<{ success: boolean; error?: string }>;
+  onUpdateQuickNotes?: (
+    orderId: string,
+    quickNotes: string,
+  ) => Promise<{ success: boolean; error?: string }>;
+  onToggleOrderFlag?: (
+    orderId: string,
+    isFlagged: boolean,
+    flagReason: string,
+  ) => Promise<{ success: boolean; error?: string }>;
   tables?: TableConfig[];
   menuItems?: MenuItem[];
   categories?: Category[];
   onToggleMenuItemAvailability?: (id: string) => Promise<void>;
   ingredients?: Ingredient[];
-  onAdjustIngredientStock?: (ingredientId: string, quantityChanged: number, note: string) => Promise<void>;
+  onAdjustIngredientStock?: (
+    ingredientId: string,
+    quantityChanged: number,
+    note: string,
+  ) => Promise<void>;
   operatingHours?: any[];
   servicePaused?: boolean;
   onToggleServicePause?: (paused: boolean) => Promise<void>;
@@ -137,7 +184,7 @@ export const KitchenDisplaySystem: React.FC<KitchenDisplaySystemProps> = ({
   // 📝 訂單摺疊狀態
   const [collapsedOrders, setCollapsedOrders] = useState<Set<string>>(new Set());
   const toggleOrderCollapse = (orderId: string) => {
-    setCollapsedOrders(prev => {
+    setCollapsedOrders((prev) => {
       const next = new Set(prev);
       if (next.has(orderId)) {
         next.delete(orderId);
@@ -162,7 +209,13 @@ export const KitchenDisplaySystem: React.FC<KitchenDisplaySystemProps> = ({
   const [testLoading, setTestLoading] = useState(false);
   const [printerSuccess, setPrinterSuccess] = useState<string | null>(null);
   const [printerError, setPrinterError] = useState<string | null>(null);
-  const [printConfirmData, setPrintConfirmData] = useState<{ title: string; ip: string; onConfirm: () => void; receiptType?: string; receiptBody?: string } | null>(null);
+  const [printConfirmData, setPrintConfirmData] = useState<{
+    title: string;
+    ip: string;
+    onConfirm: () => void;
+    receiptType?: string;
+    receiptBody?: string;
+  } | null>(null);
 
   // Voice/Speech Dictation States
   const [dictatingOrderId, setDictatingOrderId] = useState<string | null>(null);
@@ -263,9 +316,12 @@ export const KitchenDisplaySystem: React.FC<KitchenDisplaySystemProps> = ({
     try {
       const ctx = getAudioContext();
       if (ctx && ctx.state === 'suspended') {
-        ctx.resume().then(() => {
-          setAudioNeedsUnlock(false);
-        }).catch(() => {});
+        ctx
+          .resume()
+          .then(() => {
+            setAudioNeedsUnlock(false);
+          })
+          .catch(() => {});
       } else if (ctx && ctx.state === 'running') {
         setAudioNeedsUnlock(false);
       }
@@ -355,15 +411,25 @@ export const KitchenDisplaySystem: React.FC<KitchenDisplaySystemProps> = ({
       const utterance = new SpeechSynthesisUtterance(text);
       utterance.lang = 'zh-TW';
 
-      const voices = cachedVoicesRef.current.length > 0
-        ? cachedVoicesRef.current
-        : window.speechSynthesis.getVoices();
+      const voices =
+        cachedVoicesRef.current.length > 0
+          ? cachedVoicesRef.current
+          : window.speechSynthesis.getVoices();
 
-      const zhVoice = voices.find(v => {
+      const zhVoice = voices.find((v) => {
         const lang = v.lang.toLowerCase();
-        return lang.includes('zh-tw') || lang.includes('zh_tw') || lang.includes('cmn-hant') ||
-               lang.includes('zh-hk') || lang.includes('zh-cn') || lang.includes('zh_cn') ||
-               lang.includes('zh') || lang.includes('zho') || lang.includes('cmn') || lang.includes('chn');
+        return (
+          lang.includes('zh-tw') ||
+          lang.includes('zh_tw') ||
+          lang.includes('cmn-hant') ||
+          lang.includes('zh-hk') ||
+          lang.includes('zh-cn') ||
+          lang.includes('zh_cn') ||
+          lang.includes('zh') ||
+          lang.includes('zho') ||
+          lang.includes('cmn') ||
+          lang.includes('chn')
+        );
       });
 
       if (zhVoice) {
@@ -411,12 +477,12 @@ export const KitchenDisplaySystem: React.FC<KitchenDisplaySystemProps> = ({
 
     // Track initial mount so we don't auto-scroll on page reload
     if (isInitialMountRef.current) {
-      orders.forEach(o => seenOrderIdsRef.current.add(o.id));
+      orders.forEach((o) => seenOrderIdsRef.current.add(o.id));
       isInitialMountRef.current = false;
     } else {
-      const brandNewOrders = orders.filter(o => !seenOrderIdsRef.current.has(o.id));
+      const brandNewOrders = orders.filter((o) => !seenOrderIdsRef.current.has(o.id));
       if (brandNewOrders.length > 0) {
-        brandNewOrders.forEach(o => seenOrderIdsRef.current.add(o.id));
+        brandNewOrders.forEach((o) => seenOrderIdsRef.current.add(o.id));
         if (autoScrollEnabled) {
           setTimeout(() => {
             scrollToHeaderTop();
@@ -425,29 +491,40 @@ export const KitchenDisplaySystem: React.FC<KitchenDisplaySystemProps> = ({
       }
     }
 
-    const pendingOrders = orders.filter(o => o.status === 'pending');
+    const pendingOrders = orders.filter((o) => o.status === 'pending');
     if (pendingOrders.length === 0) {
-      if ('speechSynthesis' in window && (window.speechSynthesis.speaking || window.speechSynthesis.pending)) {
+      if (
+        'speechSynthesis' in window &&
+        (window.speechSynthesis.speaking || window.speechSynthesis.pending)
+      ) {
         window.speechSynthesis.cancel();
       }
       return;
     }
 
     const announcePendingOrders = () => {
-      const currentPending = orders.filter(o => o.status === 'pending');
+      const currentPending = orders.filter((o) => o.status === 'pending');
       if (currentPending.length === 0) return;
 
-      const tableListStr = currentPending.map(o => {
-        let tStr = o.tableNumber;
-        if (!tStr || tStr.trim() === '' || tStr.toLowerCase() === 'takeout' || tStr.toLowerCase() === '外帶') {
-          return '外帶';
-        }
-        return `${tStr}桌`;
-      }).join('、');
+      const tableListStr = currentPending
+        .map((o) => {
+          const tStr = o.tableNumber;
+          if (
+            !tStr ||
+            tStr.trim() === '' ||
+            tStr.toLowerCase() === 'takeout' ||
+            tStr.toLowerCase() === '外帶'
+          ) {
+            return '外帶';
+          }
+          return `${tStr}桌`;
+        })
+        .join('、');
 
-      const messageText = currentPending.length === 1
-        ? `新訂單待確認，${tableListStr}，請確認接單！`
-        : `您有 ${currentPending.length} 筆新訂單待確認，包含 ${tableListStr}，請確認接單！`;
+      const messageText =
+        currentPending.length === 1
+          ? `新訂單待確認，${tableListStr}，請確認接單！`
+          : `您有 ${currentPending.length} 筆新訂單待確認，包含 ${tableListStr}，請確認接單！`;
 
       if (ttsEnabled) {
         speak(messageText);
@@ -466,11 +543,21 @@ export const KitchenDisplaySystem: React.FC<KitchenDisplaySystemProps> = ({
 
     return () => {
       clearInterval(broadcastTimer);
-      if ('speechSynthesis' in window && (window.speechSynthesis.speaking || window.speechSynthesis.pending)) {
+      if (
+        'speechSynthesis' in window &&
+        (window.speechSynthesis.speaking || window.speechSynthesis.pending)
+      ) {
         window.speechSynthesis.cancel();
       }
     };
-  }, [orders.filter(o => o.status === 'pending').map(o => `${o.id}:${o.status}`).join(','), ttsEnabled, autoScrollEnabled]);
+  }, [
+    orders
+      .filter((o) => o.status === 'pending')
+      .map((o) => `${o.id}:${o.status}`)
+      .join(','),
+    ttsEnabled,
+    autoScrollEnabled,
+  ]);
 
   // Special Attention Flag States
   const [flaggingOrderId, setFlaggingOrderId] = useState<string | null>(null);
@@ -483,7 +570,7 @@ export const KitchenDisplaySystem: React.FC<KitchenDisplaySystemProps> = ({
   // Keep quickViewOrder in sync with the live orders list
   useEffect(() => {
     if (quickViewOrder) {
-      const liveOrder = orders.find(o => o.id === quickViewOrder.id);
+      const liveOrder = orders.find((o) => o.id === quickViewOrder.id);
       if (liveOrder) {
         setQuickViewOrder(liveOrder);
       }
@@ -493,15 +580,18 @@ export const KitchenDisplaySystem: React.FC<KitchenDisplaySystemProps> = ({
   // Search state for active orders filtering (ID or table number)
   const [searchQuery, setSearchQuery] = useState<string>('');
 
-
   // Printer real-time health indicator state
-  const { run: pingRun } = useRetry(async () => {
-    const res = await apiFetch(`/api/printer/ping?ip=${encodeURIComponent(printerIp)}`);
-    if (!res.ok) throw new Error('HTTP error ' + res.status);
-    const data = await res.json();
-    if (!data.reachable) throw new Error(data.error || 'Printer unreachable');
-    return data;
-  }, 5, 500);
+  const { run: pingRun } = useRetry(
+    async () => {
+      const res = await apiFetch(`/api/printer/ping?ip=${encodeURIComponent(printerIp)}`);
+      if (!res.ok) throw new Error('HTTP error ' + res.status);
+      const data = await res.json();
+      if (!data.reachable) throw new Error(data.error || 'Printer unreachable');
+      return data;
+    },
+    5,
+    500,
+  );
 
   const [pingState, setPingState] = useState<{
     reachable: boolean | null;
@@ -521,9 +611,21 @@ export const KitchenDisplaySystem: React.FC<KitchenDisplaySystemProps> = ({
     setPingState((prev) => ({ ...prev, loading: true, error: null }));
     const result = await pingRun();
     if (result.result) {
-      setPingState({ reachable: true, error: null, loading: false, lastChecked: new Date().toLocaleTimeString(), skipped: false });
+      setPingState({
+        reachable: true,
+        error: null,
+        loading: false,
+        lastChecked: new Date().toLocaleTimeString(),
+        skipped: false,
+      });
     } else if (result.error) {
-      setPingState({ reachable: false, error: result.error.message || String(result.error), loading: false, lastChecked: new Date().toLocaleTimeString(), skipped: false });
+      setPingState({
+        reachable: false,
+        error: result.error.message || String(result.error),
+        loading: false,
+        lastChecked: new Date().toLocaleTimeString(),
+        skipped: false,
+      });
     } else if (result.skipped) {
       setPingState((prev) => ({ ...prev, skipped: true, loading: false }));
     }
@@ -539,7 +641,7 @@ export const KitchenDisplaySystem: React.FC<KitchenDisplaySystemProps> = ({
 
   useEffect(() => {
     triggerPrinterPing(printerIp);
-    
+
     // Auto-ping every 10 seconds
     const interval = setInterval(() => {
       triggerPrinterPing(printerIp);
@@ -561,8 +663,8 @@ export const KitchenDisplaySystem: React.FC<KitchenDisplaySystemProps> = ({
     if (!resDateStr) return { isHold: false, reason: '' };
 
     const dObj = new Date();
-    const utcTime = dObj.getTime() + (dObj.getTimezoneOffset() * 60000);
-    const localDate = new Date(utcTime + (3600000 * 8));
+    const utcTime = dObj.getTime() + dObj.getTimezoneOffset() * 60000;
+    const localDate = new Date(utcTime + 3600000 * 8);
     const yr = localDate.getFullYear();
     const mo = String(localDate.getMonth() + 1).padStart(2, '0');
     const dy = String(localDate.getDate()).padStart(2, '0');
@@ -611,9 +713,10 @@ export const KitchenDisplaySystem: React.FC<KitchenDisplaySystemProps> = ({
   // Filter orders
   const activeOrders = orders.filter((o) => {
     // 1. Status Filter
-    const matchesStatus = filterStatus === 'active'
-      ? (o.status === 'pending' || o.status === 'preparing' || o.status === 'paid')
-      : true;
+    const matchesStatus =
+      filterStatus === 'active'
+        ? o.status === 'pending' || o.status === 'preparing' || o.status === 'paid'
+        : true;
 
     if (!matchesStatus) return false;
 
@@ -651,10 +754,10 @@ export const KitchenDisplaySystem: React.FC<KitchenDisplaySystemProps> = ({
   });
 
   const getHourlyData = () => {
-    const pendingOrders = orders.filter(o => o.status === 'pending' || o.status === 'preparing');
+    const pendingOrders = orders.filter((o) => o.status === 'pending' || o.status === 'preparing');
     const hours = [11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22];
-    
-    pendingOrders.forEach(o => {
+
+    pendingOrders.forEach((o) => {
       try {
         const h = new Date(o.createdAt).getHours();
         if (!hours.includes(h)) {
@@ -664,12 +767,12 @@ export const KitchenDisplaySystem: React.FC<KitchenDisplaySystemProps> = ({
         // ignore
       }
     });
-    
+
     hours.sort((a, b) => a - b);
-    
-    return hours.map(h => {
+
+    return hours.map((h) => {
       const label = `${String(h).padStart(2, '0')}:00`;
-      const count = pendingOrders.filter(o => {
+      const count = pendingOrders.filter((o) => {
         try {
           const orderHour = new Date(o.createdAt).getHours();
           return orderHour === h;
@@ -677,11 +780,11 @@ export const KitchenDisplaySystem: React.FC<KitchenDisplaySystemProps> = ({
           return false;
         }
       }).length;
-      
+
       return {
         hour: h,
         label,
-        count
+        count,
       };
     });
   };
@@ -689,11 +792,11 @@ export const KitchenDisplaySystem: React.FC<KitchenDisplaySystemProps> = ({
   const getPredictionData = () => {
     // Standard service hours
     const hours = [11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22];
-    
+
     // Parse historical orders from the list of all orders
     const now = Date.now();
     const sevenDaysAgo = now - 7 * 24 * 60 * 60 * 1000;
-    const last7DaysOrders = orders.filter(o => {
+    const last7DaysOrders = orders.filter((o) => {
       try {
         const t = new Date(o.createdAt).getTime();
         return t >= sevenDaysAgo;
@@ -702,13 +805,17 @@ export const KitchenDisplaySystem: React.FC<KitchenDisplaySystemProps> = ({
       }
     });
 
-    const uniqueDays = new Set(last7DaysOrders.map(o => {
-      try {
-        return new Date(o.createdAt).toDateString();
-      } catch {
-        return '';
-      }
-    }).filter(Boolean));
+    const uniqueDays = new Set(
+      last7DaysOrders
+        .map((o) => {
+          try {
+            return new Date(o.createdAt).toDateString();
+          } catch {
+            return '';
+          }
+        })
+        .filter(Boolean),
+    );
     const numDays = Math.max(uniqueDays.size, 1);
 
     // Standard baseline distribution representing typical rush pattern of Sabay Grill
@@ -725,18 +832,18 @@ export const KitchenDisplaySystem: React.FC<KitchenDisplaySystemProps> = ({
       19: 11.2,
       20: 8.4,
       21: 4.2,
-      22: 1.8
+      22: 1.8,
     };
 
     // Calculate dynamic order velocity scaling
     const averageDailyVolume = orders.length / 3;
     const scaleFactor = Math.min(Math.max(averageDailyVolume / 4, 0.65), 2.2);
 
-    return hours.map(h => {
+    return hours.map((h) => {
       const label = `${String(h).padStart(2, '0')}:00`;
 
       // Real historical count for this hours
-      const historicalOrdersForHour = last7DaysOrders.filter(o => {
+      const historicalOrdersForHour = last7DaysOrders.filter((o) => {
         try {
           return new Date(o.createdAt).getHours() === h;
         } catch {
@@ -751,14 +858,15 @@ export const KitchenDisplaySystem: React.FC<KitchenDisplaySystemProps> = ({
       const baselinePredicted = Math.round((baseCoefficients[h] || 1.0) * scaleFactor);
 
       // Blended mathematical regression
-      const finalExpectedVolume = realHistoricalAvg > 0
-        ? Math.round(realHistoricalAvg * 0.4 + baselinePredicted * 0.6)
-        : baselinePredicted;
+      const finalExpectedVolume =
+        realHistoricalAvg > 0
+          ? Math.round(realHistoricalAvg * 0.4 + baselinePredicted * 0.6)
+          : baselinePredicted;
 
-      // To compare live counts: find actual orders placed today 
+      // To compare live counts: find actual orders placed today
       const todayStart = new Date();
       todayStart.setHours(0, 0, 0, 0);
-      const actualCountToday = orders.filter(o => {
+      const actualCountToday = orders.filter((o) => {
         try {
           const oTime = new Date(o.createdAt);
           return oTime.getTime() >= todayStart.getTime() && oTime.getHours() === h;
@@ -773,7 +881,10 @@ export const KitchenDisplaySystem: React.FC<KitchenDisplaySystemProps> = ({
       return {
         hour: h,
         label,
-        historicalAvg: realHistoricalAvg > 0 ? realHistoricalAvg : parseFloat((baselinePredicted * 0.75).toFixed(1)),
+        historicalAvg:
+          realHistoricalAvg > 0
+            ? realHistoricalAvg
+            : parseFloat((baselinePredicted * 0.75).toFixed(1)),
         expectedVolume: finalExpectedVolume,
         actualToday: actualCountToday,
         upperBound: finalExpectedVolume + margin,
@@ -783,7 +894,7 @@ export const KitchenDisplaySystem: React.FC<KitchenDisplaySystemProps> = ({
   };
 
   const hourlyData = getHourlyData();
-  const maxCount = Math.max(...hourlyData.map(d => d.count), 5);
+  const maxCount = Math.max(...hourlyData.map((d) => d.count), 5);
   const predictionData = getPredictionData();
 
   const CustomTooltip = ({ active, payload }: any) => {
@@ -791,7 +902,9 @@ export const KitchenDisplaySystem: React.FC<KitchenDisplaySystemProps> = ({
       const data = payload[0].payload;
       return (
         <div className="bg-[#1C1C1C] border border-white/10 p-3 rounded-lg shadow-xl text-xs space-y-1.5 text-left font-sans">
-          <p className="font-extrabold text-white border-b border-white/5 pb-1 font-mono">{data.label} 時段運載</p>
+          <p className="font-extrabold text-white border-b border-white/5 pb-1 font-mono">
+            {data.label} 時段運載
+          </p>
           <p className="text-[#00C300] font-bold flex items-center justify-between gap-6">
             <span>🎯 今日實際單量:</span>
             <span className="font-mono text-sm font-black">{data.actualToday} 筆</span>
@@ -806,7 +919,9 @@ export const KitchenDisplaySystem: React.FC<KitchenDisplaySystemProps> = ({
           </p>
           <div className="text-[10px] text-zinc-500 border-t border-white/5 pt-1.5 flex justify-between gap-6 font-mono">
             <span>預期波動區間:</span>
-            <span>{data.lowerBound} - {data.upperBound} 筆</span>
+            <span>
+              {data.lowerBound} - {data.upperBound} 筆
+            </span>
           </div>
         </div>
       );
@@ -828,7 +943,12 @@ export const KitchenDisplaySystem: React.FC<KitchenDisplaySystemProps> = ({
     await onUpdateOrderStatus(id, nextStatus);
   };
 
-  const handleItemStatusToggle = (orderId: string, itemId: string, isCompleted: boolean, isPrepared?: boolean) => {
+  const handleItemStatusToggle = (
+    orderId: string,
+    itemId: string,
+    isCompleted: boolean,
+    isPrepared?: boolean,
+  ) => {
     if (kdsRole !== 'kitchen') {
       alert('【權限不足】僅有「廚房」角色可以更改餐點狀態，店員僅能瀏覽。');
       return;
@@ -841,30 +961,55 @@ export const KitchenDisplaySystem: React.FC<KitchenDisplaySystemProps> = ({
   const getUrgencyText = (createdAt: string) => {
     const diffMins = Math.floor((Date.now() - new Date(createdAt).getTime()) / 60000);
     if (diffMins < 5) {
-      const text = currentLang === 'zh' ? '剛剛下單 Fresh' : 
-                   currentLang === 'en' ? 'Just Ordered Fresh' : 
-                   currentLang === 'ko' ? '방금 주문 Fresh' : 
-                   currentLang === 'ja' ? '注文直後 Fresh' : 
-                   currentLang === 'th' ? 'สั่งซื้อเมื่อครู่ Fresh' : 
-                   'Vừa gọi món Fresh';
+      const text =
+        currentLang === 'zh'
+          ? '剛剛下單 Fresh'
+          : currentLang === 'en'
+            ? 'Just Ordered Fresh'
+            : currentLang === 'ko'
+              ? '방금 주문 Fresh'
+              : currentLang === 'ja'
+                ? '注文直後 Fresh'
+                : currentLang === 'th'
+                  ? 'สั่งซื้อเมื่อครู่ Fresh'
+                  : 'Vừa gọi món Fresh';
       return { text, style: 'bg-emerald-500/10 text-[#00C300] border-emerald-500/20' };
     }
     if (diffMins < 15) {
-      const text = currentLang === 'zh' ? `延遲 ${diffMins} 分鐘` : 
-                   currentLang === 'en' ? `Delayed ${diffMins} mins` : 
-                   currentLang === 'ko' ? `지연 ${diffMins}분` : 
-                   currentLang === 'ja' ? `遅延 ${diffMins} 分` : 
-                   currentLang === 'th' ? `ล่าช้า ${diffMins} นาที` : 
-                   `Trễ ${diffMins} phút`;
-      return { text, style: 'bg-amber-500/10 text-amber-400 border-amber-500/20 font-bold animate-pulse' };
+      const text =
+        currentLang === 'zh'
+          ? `延遲 ${diffMins} 分鐘`
+          : currentLang === 'en'
+            ? `Delayed ${diffMins} mins`
+            : currentLang === 'ko'
+              ? `지연 ${diffMins}분`
+              : currentLang === 'ja'
+                ? `遅延 ${diffMins} 分`
+                : currentLang === 'th'
+                  ? `ล่าช้า ${diffMins} นาที`
+                  : `Trễ ${diffMins} phút`;
+      return {
+        text,
+        style: 'bg-amber-500/10 text-amber-400 border-amber-500/20 font-bold animate-pulse',
+      };
     }
-    const text = currentLang === 'zh' ? `嚴重超時 ${diffMins} 分!` : 
-                 currentLang === 'en' ? `Severely Overdue ${diffMins} mins!` : 
-                 currentLang === 'ko' ? `심각한 시간 초과 ${diffMins}분!` : 
-                 currentLang === 'ja' ? `深刻な超過 ${diffMins} 分!` : 
-                 currentLang === 'th' ? `เกินเวลาอย่างมาก ${diffMins} นาที!` : 
-                 `Quá hạn nghiêm trọng ${diffMins} phút!`;
-    return { text, style: 'bg-red-500/10 text-red-400 border-red-500/20 uppercase font-black tracking-wider animate-bounce' };
+    const text =
+      currentLang === 'zh'
+        ? `嚴重超時 ${diffMins} 分!`
+        : currentLang === 'en'
+          ? `Severely Overdue ${diffMins} mins!`
+          : currentLang === 'ko'
+            ? `심각한 시간 초과 ${diffMins}분!`
+            : currentLang === 'ja'
+              ? `深刻な超過 ${diffMins} 分!`
+              : currentLang === 'th'
+                ? `เกินเวลาอย่างมาก ${diffMins} นาที!`
+                : `Quá hạn nghiêm trọng ${diffMins} phút!`;
+    return {
+      text,
+      style:
+        'bg-red-500/10 text-red-400 border-red-500/20 uppercase font-black tracking-wider animate-bounce',
+    };
   };
 
   const getElapsedTime = (createdAt: string) => {
@@ -872,7 +1017,7 @@ export const KitchenDisplaySystem: React.FC<KitchenDisplaySystemProps> = ({
     const elapsedMins = Math.floor(elapsedMs / 60000);
     const elapsedSecs = Math.floor((elapsedMs % 60000) / 1000);
     const text = `${elapsedMins}m ${elapsedSecs}s`;
-    
+
     let style = '';
     if (elapsedMins <= 15) {
       style = 'bg-white/5 text-white border-white/20';
@@ -885,9 +1030,9 @@ export const KitchenDisplaySystem: React.FC<KitchenDisplaySystemProps> = ({
   };
 
   const getOrderItemPrepTimeMinutes = (menuItemId: string): number => {
-    const item = menuItems.find(m => m.id === menuItemId);
+    const item = menuItems.find((m) => m.id === menuItemId);
     if (!item) return 6; // default average cooking minutes
-    
+
     const cat = item.category || '';
     if (cat === 'combos') return 12;
     if (cat === 'skewers') return 10;
@@ -899,20 +1044,22 @@ export const KitchenDisplaySystem: React.FC<KitchenDisplaySystemProps> = ({
 
   const getOrderAveragePrepTimeMinutes = (order: Order): number => {
     if (!order.items || order.items.length === 0) return 6;
-    
+
     let totalPrep = 0;
     let totalQty = 0;
-    
-    order.items.forEach(it => {
+
+    order.items.forEach((it) => {
       const itemPrep = getOrderItemPrepTimeMinutes(it.menuItemId);
       totalPrep += itemPrep * it.qty;
       totalQty += it.qty;
     });
-    
-    return totalQty > 0 ? (totalPrep / totalQty) : 6;
+
+    return totalQty > 0 ? totalPrep / totalQty : 6;
   };
 
-  const isOrderLateForPrepTime = (order: Order): { isLate: boolean; currentWaitMins: number; avgPrepMins: number; limitMins: number } => {
+  const isOrderLateForPrepTime = (
+    order: Order,
+  ): { isLate: boolean; currentWaitMins: number; avgPrepMins: number; limitMins: number } => {
     const elapsedMs = Date.now() - new Date(order.createdAt).getTime();
     const currentWaitMins = elapsedMs / 60000;
     const avgPrepMins = getOrderAveragePrepTimeMinutes(order);
@@ -921,13 +1068,13 @@ export const KitchenDisplaySystem: React.FC<KitchenDisplaySystemProps> = ({
       isLate: currentWaitMins > limitMins,
       currentWaitMins,
       avgPrepMins,
-      limitMins
+      limitMins,
     };
   };
 
   const getTableOccupancyElapsedTime = (tableNumber: string) => {
     if (!tableNumber) return null;
-    
+
     // Get all orders that are active for this table number in the system
     const activeTableOrders = orders.filter((o) => {
       const isThisTable = o.tableNumber === tableNumber;
@@ -946,7 +1093,7 @@ export const KitchenDisplaySystem: React.FC<KitchenDisplaySystemProps> = ({
     const elapsedMs = Date.now() - new Date(oldestOrder.createdAt).getTime();
     const elapsedMins = Math.floor(elapsedMs / 60000);
     const elapsedSecs = Math.floor((elapsedMs % 60000) / 1000);
-    
+
     let style = 'bg-sky-500/10 text-sky-400 border-sky-500/20'; // Default blue color accent for table occupancy
     if (elapsedMins >= 45) {
       style = 'bg-red-500/20 text-red-400 border-red-500/30 font-black animate-pulse';
@@ -959,36 +1106,36 @@ export const KitchenDisplaySystem: React.FC<KitchenDisplaySystemProps> = ({
       text: `${elapsedMins}m ${elapsedSecs}s`,
       style,
       orderCount: activeTableOrders.length,
-      oldestOrderId: oldestOrder.id
+      oldestOrderId: oldestOrder.id,
     };
   };
 
   const isCloseToClosing = (createdAtString: string, operatingHoursList: any[]): boolean => {
     if (!createdAtString || !operatingHoursList || operatingHoursList.length === 0) return false;
-    
+
     const date = new Date(createdAtString);
     if (isNaN(date.getTime())) return false;
-    
+
     // Convert to Taiwan Time (UTC+8) consistent with server operating hours estimation
-    const utc = date.getTime() + (date.getTimezoneOffset() * 60000);
-    const localDate = new Date(utc + (3600000 * 8));
-    
+    const utc = date.getTime() + date.getTimezoneOffset() * 60000;
+    const localDate = new Date(utc + 3600000 * 8);
+
     const day = localDate.getDay(); // 0 is Sunday, ..., 6 is Saturday
     const hour = localDate.getHours();
     const minute = localDate.getMinutes();
     const orderTotalMinutes = hour * 60 + minute;
-    
+
     for (const slot of operatingHoursList) {
       if (!slot.isActive) continue;
       if (slot.days && !slot.days.includes(day)) continue;
-      
+
       // Parse times "HH:MM"
       const [startH, startM] = slot.start.split(':').map(Number);
       const [endH, endM] = slot.end.split(':').map(Number);
-      
+
       const startTotal = startH * 60 + startM;
-      let endTotal = endH * 60 + endM;
-      
+      const endTotal = endH * 60 + endM;
+
       // Handle overnight end times (e.g., 17:30 to 00:30)
       if (endTotal < startTotal) {
         // If current order time is before end hour (e.g. 00:15 vs slot starting 17:30 and ending 00:30)
@@ -1071,7 +1218,9 @@ export const KitchenDisplaySystem: React.FC<KitchenDisplaySystemProps> = ({
     if (categories && categories.length > 0) {
       return categories;
     }
-    const uniqueCategoryIds = Array.from(new Set(menuItems.map(item => item.category).filter(Boolean)));
+    const uniqueCategoryIds = Array.from(
+      new Set(menuItems.map((item) => item.category).filter(Boolean)),
+    );
     const categoryMap: { [key: string]: string } = {
       drinks: '飲料',
       skewers: '烤肉',
@@ -1079,7 +1228,7 @@ export const KitchenDisplaySystem: React.FC<KitchenDisplaySystemProps> = ({
       noodles: '特色主食',
       combos: '精選套餐',
     };
-    return uniqueCategoryIds.map(id => ({
+    return uniqueCategoryIds.map((id) => ({
       id,
       name: {
         zh: categoryMap[id] || id,
@@ -1087,7 +1236,7 @@ export const KitchenDisplaySystem: React.FC<KitchenDisplaySystemProps> = ({
         ja: id,
         ko: id,
         th: id,
-      } as { [key in Language]: string }
+      } as { [key in Language]: string },
     }));
   };
 
@@ -1103,7 +1252,8 @@ export const KitchenDisplaySystem: React.FC<KitchenDisplaySystemProps> = ({
     setDictatedText('');
     setNoteError(null);
 
-    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    const SpeechRecognition =
+      (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
     if (!SpeechRecognition) {
       setNoteError('此瀏覽器或外掛環境暫不支援 Web Speech API。但您可在下方手動輸入快速備註。');
       setIsDictating(false);
@@ -1166,17 +1316,17 @@ export const KitchenDisplaySystem: React.FC<KitchenDisplaySystemProps> = ({
     let parsed = dictatedText.trim();
     if (parsed) {
       const shortcuts: { [key: string]: string } = {
-        '先出': '⚡ 急：優先出餐 (RUSH!)',
-        '加湯': '🍲 免費加湯 (Add broth)',
-        '不要辣': '🌶️ 去辣 (No spicy)',
-        '小辣': '🌶️ 精確小辣',
-        '大辣': '🌶️ 泰國大辣',
-        '外帶': '🥡 外帶打包 (Takeout)',
-        '不要香菜': '🌿 去除香菜 (No coriander)',
-        '多菜': '🥗 多配菜 (Extra veggies)',
-        '加肉': '🥩 加點肉品 (Add extra meat)',
-        '少糖': '🍬 微糖 (Less sweet)',
-        '去冰': '🧊 去冰'
+        先出: '⚡ 急：優先出餐 (RUSH!)',
+        加湯: '🍲 免費加湯 (Add broth)',
+        不要辣: '🌶️ 去辣 (No spicy)',
+        小辣: '🌶️ 精確小辣',
+        大辣: '🌶️ 泰國大辣',
+        外帶: '🥡 外帶打包 (Takeout)',
+        不要香菜: '🌿 去除香菜 (No coriander)',
+        多菜: '🥗 多配菜 (Extra veggies)',
+        加肉: '🥩 加點肉品 (Add extra meat)',
+        少糖: '🍬 微糖 (Less sweet)',
+        去冰: '🧊 去冰',
       };
 
       for (const [key, value] of Object.entries(shortcuts)) {
@@ -1231,7 +1381,11 @@ export const KitchenDisplaySystem: React.FC<KitchenDisplaySystemProps> = ({
     }
   };
 
-  const toggleFlagState = async (orderId: string, currentFlagged: boolean, currentReason: string) => {
+  const toggleFlagState = async (
+    orderId: string,
+    currentFlagged: boolean,
+    currentReason: string,
+  ) => {
     if (onToggleOrderFlag) {
       if (currentFlagged) {
         // Unflag immediately
@@ -1265,18 +1419,27 @@ export const KitchenDisplaySystem: React.FC<KitchenDisplaySystemProps> = ({
   const qvOcc = quickViewOrder ? getTableOccupancyElapsedTime(quickViewOrder.tableNumber) : null;
 
   return (
-    <div ref={kdsHeaderRef} className="grid grid-cols-1 xl:grid-cols-4 gap-6 text-left text-white scroll-mt-6" id="kds-panel">
+    <div
+      ref={kdsHeaderRef}
+      className="grid grid-cols-1 xl:grid-cols-4 gap-6 text-left text-white scroll-mt-6"
+      id="kds-panel"
+    >
       {/* Sound notification indicator simulation */}
       {beepSim && (
         <div className="fixed top-8 right-8 bg-[#161616] border border-[#E5B453] shadow-2xl text-white px-5 py-3 rounded-xl flex items-center space-x-2 z-50 animate-bounce">
           <Volume2 className="text-[#E5B453] animate-pulse" size={20} />
-          <span className="font-bold text-xs text-[#E5B453]">🔊 [逼逼！廚房票據機已列印全新工作單]</span>
+          <span className="font-bold text-xs text-[#E5B453]">
+            🔊 [逼逼！廚房票據機已列印全新工作單]
+          </span>
         </div>
       )}
 
       {/* Main Culinary Tickets Workspace */}
       <div className="xl:col-span-3 space-y-5">
-        <div className="bg-[#161616] text-white rounded-xl p-5 border border-white/10 space-y-4" id="kds-header-main-box">
+        <div
+          className="bg-[#161616] text-white rounded-xl p-5 border border-white/10 space-y-4"
+          id="kds-header-main-box"
+        >
           {/* Top Row: Brand & Core Controls */}
           <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 border-b border-white/5 pb-4">
             <div className="flex items-center space-x-3 text-left">
@@ -1284,14 +1447,19 @@ export const KitchenDisplaySystem: React.FC<KitchenDisplaySystemProps> = ({
                 <ChefHat size={22} className="stroke-[2.5]" />
               </div>
               <div>
-                <h2 className="text-base font-bold font-serif tracking-wide text-white">沙貝廚房備餐顯示屏 (KDS Monitor)</h2>
+                <h2 className="text-base font-bold font-serif tracking-wide text-white">
+                  沙貝廚房備餐顯示屏 (KDS Monitor)
+                </h2>
                 <p className="text-white/40 text-xs">即時同步桌席點單 · 最新 1 秒連線正常</p>
               </div>
             </div>
 
             <div className="flex flex-wrap items-center gap-3 w-full lg:w-auto lg:justify-end">
               {/* Search Input Filter */}
-              <div className="relative flex items-center w-full sm:w-52" id="kds-search-bar-container">
+              <div
+                className="relative flex items-center w-full sm:w-52"
+                id="kds-search-bar-container"
+              >
                 <Search size={14} className="absolute left-3 text-white/40" />
                 <input
                   type="text"
@@ -1313,8 +1481,13 @@ export const KitchenDisplaySystem: React.FC<KitchenDisplaySystemProps> = ({
               </div>
 
               {/* 👥 KDS 登錄角色選取器 (Role Selector: 廚房 vs 店員) */}
-              <div className="flex items-center gap-1.5 bg-black/60 p-1 rounded-xl border border-white/10 shrink-0 select-none font-sans" id="kds-role-selector">
-                <span className="text-[10px] text-white/50 font-bold px-1 select-none">登錄角色:</span>
+              <div
+                className="flex items-center gap-1.5 bg-black/60 p-1 rounded-xl border border-white/10 shrink-0 select-none font-sans"
+                id="kds-role-selector"
+              >
+                <span className="text-[10px] text-white/50 font-bold px-1 select-none">
+                  登錄角色:
+                </span>
                 <button
                   type="button"
                   id="kds-role-kitchen-btn"
@@ -1352,19 +1525,43 @@ export const KitchenDisplaySystem: React.FC<KitchenDisplaySystemProps> = ({
                   id="kds-filter-active"
                   onClick={() => setFilterStatus('active')}
                   className={`px-3 py-1 rounded-lg text-[11px] font-black transition cursor-pointer ${
-                    filterStatus === 'active' ? 'bg-[#E5B453] text-[#0F0F0F]' : 'text-white/40 hover:text-white'
+                    filterStatus === 'active'
+                      ? 'bg-[#E5B453] text-[#0F0F0F]'
+                      : 'text-white/40 hover:text-white'
                   }`}
                 >
-                  {currentLang === 'zh' ? '未完成 (備餐中)' : currentLang === 'en' ? 'Active (Preparing)' : currentLang === 'ko' ? '미완료 (준비 중)' : currentLang === 'ja' ? '未完了 (準備中)' : currentLang === 'th' ? 'ยังไม่เสร็จ (กำลังปรุง)' : 'Chưa xong (Đang chuẩn bị)'}
+                  {currentLang === 'zh'
+                    ? '未完成 (備餐中)'
+                    : currentLang === 'en'
+                      ? 'Active (Preparing)'
+                      : currentLang === 'ko'
+                        ? '미완료 (준비 중)'
+                        : currentLang === 'ja'
+                          ? '未完了 (準備中)'
+                          : currentLang === 'th'
+                            ? 'ยังไม่เสร็จ (กำลังปรุง)'
+                            : 'Chưa xong (Đang chuẩn bị)'}
                 </button>
                 <button
                   id="kds-filter-all"
                   onClick={() => setFilterStatus('all')}
                   className={`px-3 py-1 rounded-lg text-[11px] font-black transition cursor-pointer ${
-                    filterStatus === 'all' ? 'bg-[#E5B453] text-[#0F0F0F]' : 'text-white/40 hover:text-white'
+                    filterStatus === 'all'
+                      ? 'bg-[#E5B453] text-[#0F0F0F]'
+                      : 'text-white/40 hover:text-white'
                   }`}
                 >
-                  {currentLang === 'zh' ? '全部歷史票' : currentLang === 'en' ? 'All History Tickets' : currentLang === 'ko' ? '전체 내역서' : currentLang === 'ja' ? '全履歴伝票' : currentLang === 'th' ? 'ประวัติทั้งหมด' : 'Tất cả phiếu lịch sử'}
+                  {currentLang === 'zh'
+                    ? '全部歷史票'
+                    : currentLang === 'en'
+                      ? 'All History Tickets'
+                      : currentLang === 'ko'
+                        ? '전체 내역서'
+                        : currentLang === 'ja'
+                          ? '全履歴伝票'
+                          : currentLang === 'th'
+                            ? 'ประวัติทั้งหมด'
+                            : 'Tất cả phiếu lịch sử'}
                 </button>
               </div>
             </div>
@@ -1386,7 +1583,17 @@ export const KitchenDisplaySystem: React.FC<KitchenDisplaySystemProps> = ({
                 }`}
                 title="時間直欄訂單票長視圖"
               >
-                {currentLang === 'zh' ? '標準訂單票卡' : currentLang === 'en' ? 'Standard Tickets' : currentLang === 'ko' ? '일반 주문서' : currentLang === 'ja' ? '標準伝票' : currentLang === 'th' ? 'บัตรออเดอร์ทั่วไป' : 'Phiếu gọi món chuẩn'}
+                {currentLang === 'zh'
+                  ? '標準訂單票卡'
+                  : currentLang === 'en'
+                    ? 'Standard Tickets'
+                    : currentLang === 'ko'
+                      ? '일반 주문서'
+                      : currentLang === 'ja'
+                        ? '標準伝票'
+                        : currentLang === 'th'
+                          ? 'บัตรออเดอร์ทั่วไป'
+                          : 'Phiếu gọi món chuẩn'}
               </button>
               <button
                 id="kds-view-merged-toggle"
@@ -1397,12 +1604,27 @@ export const KitchenDisplaySystem: React.FC<KitchenDisplaySystemProps> = ({
                 title="合併相同品項與計量進行批次製作"
               >
                 <ChefHat size={11} className={isMergedView ? 'animate-bounce' : ''} />
-                <span>{currentLang === 'zh' ? '合併相似菜色' : currentLang === 'en' ? 'Merged View' : currentLang === 'ko' ? '메뉴 병합 보기' : currentLang === 'ja' ? 'メニュー統合表示' : currentLang === 'th' ? 'รวมเมนูที่เหมือนกัน' : 'Gộp món giống nhau'}</span>
+                <span>
+                  {currentLang === 'zh'
+                    ? '合併相似菜色'
+                    : currentLang === 'en'
+                      ? 'Merged View'
+                      : currentLang === 'ko'
+                        ? '메뉴 병합 보기'
+                        : currentLang === 'ja'
+                          ? 'メニュー統合表示'
+                          : currentLang === 'th'
+                            ? 'รวมเมนูที่เหมือนกัน'
+                            : 'Gộp món giống nhau'}
+                </span>
               </button>
             </div>
 
             {/* 🆙 自動滾動與置頂切換輔助 (Auto-Scroll To Top Monitor Controls) */}
-            <div className="flex items-center bg-black/40 p-1 rounded-xl border border-white/10 shrink-0 select-none gap-2" id="kds-scroll-top-wrapper">
+            <div
+              className="flex items-center bg-black/40 p-1 rounded-xl border border-white/10 shrink-0 select-none gap-2"
+              id="kds-scroll-top-wrapper"
+            >
               <button
                 id="kds-autoscroll-toggle-btn"
                 type="button"
@@ -1420,12 +1642,38 @@ export const KitchenDisplaySystem: React.FC<KitchenDisplaySystemProps> = ({
                     ? 'bg-[#E5B453] text-[#0F0F0F]'
                     : 'text-white/40 hover:text-white'
                 }`}
-                title={autoScrollEnabled ? "關閉新訂單自動滾動置頂輔助" : "開啟新訂單自動滾動置頂輔助"}
+                title={
+                  autoScrollEnabled ? '關閉新訂單自動滾動置頂輔助' : '開啟新訂單自動滾動置頂輔助'
+                }
               >
                 <RefreshCw size={11} className={autoScrollEnabled ? 'animate-spin' : ''} />
-                <span>{autoScrollEnabled ? (currentLang === 'zh' ? '自動滾動: 開' : currentLang === 'en' ? 'Auto-Scroll: ON' : currentLang === 'ko' ? '자동 스크롤: 켜짐' : currentLang === 'ja' ? '自動スクロール: 有効' : currentLang === 'th' ? 'เลื่อนอัตโนมัติ: เปิด' : 'Tự động cuộn: Bật') : (currentLang === 'zh' ? '自動滾動: 關' : currentLang === 'en' ? 'Auto-Scroll: OFF' : currentLang === 'ko' ? '자동 스크롤: 꺼짐' : currentLang === 'ja' ? '자동스크ロール: 無効' : currentLang === 'th' ? 'เลื่อนอัตโนมัติ: ปิด' : 'Tự động cuộn: Tắt')}</span>
+                <span>
+                  {autoScrollEnabled
+                    ? currentLang === 'zh'
+                      ? '自動滾動: 開'
+                      : currentLang === 'en'
+                        ? 'Auto-Scroll: ON'
+                        : currentLang === 'ko'
+                          ? '자동 스크롤: 켜짐'
+                          : currentLang === 'ja'
+                            ? '自動スクロール: 有効'
+                            : currentLang === 'th'
+                              ? 'เลื่อนอัตโนมัติ: เปิด'
+                              : 'Tự động cuộn: Bật'
+                    : currentLang === 'zh'
+                      ? '自動滾動: 關'
+                      : currentLang === 'en'
+                        ? 'Auto-Scroll: OFF'
+                        : currentLang === 'ko'
+                          ? '자동 스크롤: 꺼짐'
+                          : currentLang === 'ja'
+                            ? '자동스크ロール: 無効'
+                            : currentLang === 'th'
+                              ? 'เลื่อนอัตโนมัติ: ปิด'
+                              : 'Tự động cuộn: Tắt'}
+                </span>
               </button>
-              
+
               <button
                 id="kds-scroll-direct-top"
                 type="button"
@@ -1433,12 +1681,27 @@ export const KitchenDisplaySystem: React.FC<KitchenDisplaySystemProps> = ({
                 className="px-2 py-1 hover:bg-white/5 border border-white/10 hover:border-white/20 rounded-lg text-[10px] font-extrabold text-[#E5B453] hover:text-amber-300 transition cursor-pointer flex items-center gap-1 active:scale-95"
                 title="手動立即滾置頂部 (Manual scroll back to top)"
               >
-                <span>{currentLang === 'zh' ? '置頂 ⬆️' : currentLang === 'en' ? 'Top ⬆️' : currentLang === 'ko' ? '맨 위로 ⬆️' : currentLang === 'ja' ? 'トップ ⬆️' : currentLang === 'th' ? 'ขึ้นบนสุด ⬆️' : 'Lên đầu ⬆️'}</span>
+                <span>
+                  {currentLang === 'zh'
+                    ? '置頂 ⬆️'
+                    : currentLang === 'en'
+                      ? 'Top ⬆️'
+                      : currentLang === 'ko'
+                        ? '맨 위로 ⬆️'
+                        : currentLang === 'ja'
+                          ? 'トップ ⬆️'
+                          : currentLang === 'th'
+                            ? 'ขึ้นบนสุด ⬆️'
+                            : 'Lên đầu ⬆️'}
+                </span>
               </button>
             </div>
 
             {/* 🧹 已完成訂單超過 30M 自動隱藏 (Auto-Hide Completed Orders > 30mins) */}
-            <div className="flex items-center bg-black/40 p-1 rounded-xl border border-white/10 shrink-0 select-none gap-2" id="kds-hide-completed-wrapper">
+            <div
+              className="flex items-center bg-black/40 p-1 rounded-xl border border-white/10 shrink-0 select-none gap-2"
+              id="kds-hide-completed-wrapper"
+            >
               <button
                 id="kds-hide-completed-toggle-btn"
                 type="button"
@@ -1456,15 +1719,49 @@ export const KitchenDisplaySystem: React.FC<KitchenDisplaySystemProps> = ({
                     ? 'bg-rose-500/20 text-rose-400 border border-rose-500/30'
                     : 'text-white/40 hover:text-white hover:bg-white/5'
                 }`}
-                title={hideOlderCompleted ? "點擊關閉「隱藏 30 分鐘前已完成訂單」" : "點擊開啟「自動隱藏 30 分鐘前已完成訂單」以維持 KDS 介面清爽"}
+                title={
+                  hideOlderCompleted
+                    ? '點擊關閉「隱藏 30 分鐘前已完成訂單」'
+                    : '點擊開啟「自動隱藏 30 分鐘前已完成訂單」以維持 KDS 介面清爽'
+                }
               >
-                <Clock size={11} className={hideOlderCompleted ? 'text-rose-400 animate-pulse' : ''} />
-                <span>{hideOlderCompleted ? (currentLang === 'zh' ? '自動隱藏已完成 >30m' : currentLang === 'en' ? 'Auto-Hide Done >30m' : currentLang === 'ko' ? '완료 건 숨김 >30분' : currentLang === 'ja' ? '30分超の完了件を隠す' : currentLang === 'th' ? 'ซ่อนรายการเสร็จสิ้น >30นาที' : 'Tự động ản đã xong >30ph') : (currentLang === 'zh' ? '自動隱藏已完成 >30m (關)' : currentLang === 'en' ? 'Auto-Hide Done >30m (OFF)' : currentLang === 'ko' ? '완료 건 숨김 >30분 (꺼짐)' : currentLang === 'ja' ? '30分超の完了件を隠す (無効)' : currentLang === 'th' ? 'ซ่อนรายการเสร็จสิ้น >30นาที (ปิด)' : 'Tự động ẩn đã xong >30ph (Tắt)')}</span>
+                <Clock
+                  size={11}
+                  className={hideOlderCompleted ? 'text-rose-400 animate-pulse' : ''}
+                />
+                <span>
+                  {hideOlderCompleted
+                    ? currentLang === 'zh'
+                      ? '自動隱藏已完成 >30m'
+                      : currentLang === 'en'
+                        ? 'Auto-Hide Done >30m'
+                        : currentLang === 'ko'
+                          ? '완료 건 숨김 >30분'
+                          : currentLang === 'ja'
+                            ? '30分超の完了件を隠す'
+                            : currentLang === 'th'
+                              ? 'ซ่อนรายการเสร็จสิ้น >30นาที'
+                              : 'Tự động ản đã xong >30ph'
+                    : currentLang === 'zh'
+                      ? '自動隱藏已完成 >30m (關)'
+                      : currentLang === 'en'
+                        ? 'Auto-Hide Done >30m (OFF)'
+                        : currentLang === 'ko'
+                          ? '완료 건 숨김 >30분 (꺼짐)'
+                          : currentLang === 'ja'
+                            ? '30分超の完了件を隠す (無効)'
+                            : currentLang === 'th'
+                              ? 'ซ่อนรายการเสร็จสิ้น >30นาที (ปิด)'
+                              : 'Tự động ẩn đã xong >30ph (Tắt)'}
+                </span>
               </button>
             </div>
 
             {/* 🔊 語音合成與 Web Audio 提示音服務 Toggle */}
-            <div className="flex items-center bg-black/40 p-1 rounded-xl border border-white/10 shrink-0 select-none gap-2" id="kds-speech-synth-toggle-wrapper">
+            <div
+              className="flex items-center bg-black/40 p-1 rounded-xl border border-white/10 shrink-0 select-none gap-2"
+              id="kds-speech-synth-toggle-wrapper"
+            >
               {audioNeedsUnlock && (
                 <button
                   id="kds-audio-unlock-btn"
@@ -1485,14 +1782,36 @@ export const KitchenDisplaySystem: React.FC<KitchenDisplaySystemProps> = ({
                 type="button"
                 onClick={handleToggleTts}
                 className={`flex items-center space-x-1.5 px-3 py-1 rounded-lg text-[11px] font-black transition cursor-pointer ${
-                  ttsEnabled
-                    ? 'bg-[#E5B453] text-[#0F0F0F]'
-                    : 'text-white/40 hover:text-white'
+                  ttsEnabled ? 'bg-[#E5B453] text-[#0F0F0F]' : 'text-white/40 hover:text-white'
                 }`}
-                title={ttsEnabled ? "關閉新訂單語音自動播報" : "開啟新訂單語音自動播報"}
+                title={ttsEnabled ? '關閉新訂單語音自動播報' : '開啟新訂單語音自動播報'}
               >
                 <Volume2 size={12} className={ttsEnabled ? 'animate-pulse' : ''} />
-                <span>{ttsEnabled ? (currentLang === 'zh' ? '語音廣播: 開' : currentLang === 'en' ? 'Voice Readout: ON' : currentLang === 'ko' ? '음성 방송: 켜짐' : currentLang === 'ja' ? '音声読み上げ: 有効' : currentLang === 'th' ? 'ประกาศเสียง: เปิด' : 'Phát thanh giọng nói: Bật') : (currentLang === 'zh' ? '語音廣播: 關' : currentLang === 'en' ? 'Voice Readout: OFF' : currentLang === 'ko' ? '음성 방송: 꺼짐' : currentLang === 'ja' ? '音声読み上げ: 無効' : currentLang === 'th' ? 'ประกาศเสียง: ปิด' : 'Phát thanh giọng nói: Tắt')}</span>
+                <span>
+                  {ttsEnabled
+                    ? currentLang === 'zh'
+                      ? '語音廣播: 開'
+                      : currentLang === 'en'
+                        ? 'Voice Readout: ON'
+                        : currentLang === 'ko'
+                          ? '음성 방송: 켜짐'
+                          : currentLang === 'ja'
+                            ? '音声読み上げ: 有効'
+                            : currentLang === 'th'
+                              ? 'ประกาศเสียง: เปิด'
+                              : 'Phát thanh giọng nói: Bật'
+                    : currentLang === 'zh'
+                      ? '語音廣播: 關'
+                      : currentLang === 'en'
+                        ? 'Voice Readout: OFF'
+                        : currentLang === 'ko'
+                          ? '음성 방송: 꺼짐'
+                          : currentLang === 'ja'
+                            ? '音声読み上げ: 無効'
+                            : currentLang === 'th'
+                              ? 'ประกาศเสียง: ปิด'
+                              : 'Phát thanh giọng nói: Tắt'}
+                </span>
               </button>
               {ttsEnabled && (
                 <button
@@ -1513,7 +1832,10 @@ export const KitchenDisplaySystem: React.FC<KitchenDisplaySystemProps> = ({
         </div>
 
         {/* Category Station Filter Bar */}
-        <div className="bg-[#161616] border border-white/10 p-4 rounded-xl flex flex-col md:flex-row md:items-center justify-between text-left gap-4" id="kds-category-filter-bar">
+        <div
+          className="bg-[#161616] border border-white/10 p-4 rounded-xl flex flex-col md:flex-row md:items-center justify-between text-left gap-4"
+          id="kds-category-filter-bar"
+        >
           <div className="flex items-center space-x-2">
             <Settings size={16} className="text-[#E5B453]" />
             <h3 className="font-bold text-sm text-white font-serif tracking-wide text-left">
@@ -1533,7 +1855,7 @@ export const KitchenDisplaySystem: React.FC<KitchenDisplaySystemProps> = ({
               全部品項 (All Stations)
             </button>
             {getCategoriesList().map((cat) => {
-              const name = (getLocalizedText(cat.name, currentLang) || cat.id);
+              const name = getLocalizedText(cat.name, currentLang) || cat.id;
               const isSelected = selectedCategory === cat.id;
               return (
                 <button
@@ -1553,7 +1875,7 @@ export const KitchenDisplaySystem: React.FC<KitchenDisplaySystemProps> = ({
         </div>
 
         {/* ──────────────────────────────────────────────────────── */}
-        
+
         {/* ⚠️ 預約即將到來警示 (Upcoming Reservations Alert) */}
         {(() => {
           const now = new Date();
@@ -1574,11 +1896,16 @@ export const KitchenDisplaySystem: React.FC<KitchenDisplaySystemProps> = ({
           const upcomingRes = (reservations || []).filter(isUpcomingReservation);
           if (upcomingRes.length === 0) return null;
           return (
-            <div className="bg-amber-500/10 border-2 border-amber-500/30 p-4 rounded-xl space-y-2.5 animate-pulse text-left font-sans mb-5" id="kds-upcoming-reservations-warning">
+            <div
+              className="bg-amber-500/10 border-2 border-amber-500/30 p-4 rounded-xl space-y-2.5 animate-pulse text-left font-sans mb-5"
+              id="kds-upcoming-reservations-warning"
+            >
               <div className="flex items-center justify-between">
                 <div className="flex items-center space-x-2 text-amber-400 font-bold text-sm">
                   <span className="text-base">⚠️</span>
-                  <span className="font-serif tracking-wide">預警：顧客預約即將到來 (1小時內有 {upcomingRes.length} 筆預約抵達)</span>
+                  <span className="font-serif tracking-wide">
+                    預警：顧客預約即將到來 (1小時內有 {upcomingRes.length} 筆預約抵達)
+                  </span>
                 </div>
                 <span className="bg-amber-500/20 text-amber-300 font-mono text-[10px] font-black px-2 py-0.5 rounded border border-amber-500/30">
                   ⚡ 即將到來 Alert
@@ -1586,22 +1913,34 @@ export const KitchenDisplaySystem: React.FC<KitchenDisplaySystemProps> = ({
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
                 {upcomingRes.map((res) => (
-                  <div key={res.id} className="bg-black/40 border border-amber-500/30 p-3 rounded-xl flex flex-col justify-between space-y-2 shadow-lg">
+                  <div
+                    key={res.id}
+                    className="bg-black/40 border border-amber-500/30 p-3 rounded-xl flex flex-col justify-between space-y-2 shadow-lg"
+                  >
                     <div className="flex items-start justify-between">
                       <div>
-                        <span className="text-white font-bold text-xs block">{res.customerName}</span>
-                        <span className="text-zinc-400 text-[10px] block font-mono">{res.phone}</span>
+                        <span className="text-white font-bold text-xs block">
+                          {res.customerName}
+                        </span>
+                        <span className="text-zinc-400 text-[10px] block font-mono">
+                          {res.phone}
+                        </span>
                       </div>
                       <span className="bg-[#E5B453] text-[#0F0F0F] font-mono font-black text-xs px-2 py-0.5 rounded shadow">
                         {res.tableNumber} 桌
                       </span>
                     </div>
                     <div className="flex items-center justify-between text-xs pt-1 border-t border-white/10">
-                      <span className="text-[#E5B453] font-black font-mono">⏰ 時間: {res.time}</span>
+                      <span className="text-[#E5B453] font-black font-mono">
+                        ⏰ 時間: {res.time}
+                      </span>
                       <span className="text-zinc-200 font-bold">{res.guestCount} 人</span>
                     </div>
                     {res.notes && (
-                      <div className="text-[10px] text-zinc-300 bg-white/5 p-1.5 rounded border border-white/5 truncate" title={res.notes}>
+                      <div
+                        className="text-[10px] text-zinc-300 bg-white/5 p-1.5 rounded border border-white/5 truncate"
+                        title={res.notes}
+                      >
                         需求: {res.notes}
                       </div>
                     )}
@@ -1618,13 +1957,20 @@ export const KitchenDisplaySystem: React.FC<KitchenDisplaySystemProps> = ({
           <div className="bg-[#161616] border border-white/10 text-center py-20 rounded-xl space-y-3">
             <ChefHat size={45} className="mx-auto text-white/10" />
             {searchQuery ? (
-              <p className="text-white/40 font-bold text-sm">找不到符合「{searchQuery}」的待備訂單 🔍</p>
+              <p className="text-white/40 font-bold text-sm">
+                找不到符合「{searchQuery}」的待備訂單 🔍
+              </p>
             ) : (
-              <p className="text-white/40 font-bold text-sm">目前沒有任何待備餐點，大家辛苦了！✨</p>
+              <p className="text-white/40 font-bold text-sm">
+                目前沒有任何待備餐點，大家辛苦了！✨
+              </p>
             )}
           </div>
         ) : isMergedView ? (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-5 animate-fadeIn font-sans" id="kds-merged-grid">
+          <div
+            className="grid grid-cols-1 md:grid-cols-2 gap-5 animate-fadeIn font-sans"
+            id="kds-merged-grid"
+          >
             {getMergedDishes().map((dish) => {
               return (
                 <div
@@ -1638,10 +1984,12 @@ export const KitchenDisplaySystem: React.FC<KitchenDisplaySystemProps> = ({
                         {getLocalizedText(dish.name, currentLang)}
                       </h4>
                       <p className="text-[10px] text-white/40 uppercase tracking-widest mt-0.5">
-                        {(currentLang === 'zh' ? getLocalizedText(dish.name, 'en') || 'Dishes Combo' : getLocalizedText(dish.name, 'zh'))}
+                        {currentLang === 'zh'
+                          ? getLocalizedText(dish.name, 'en') || 'Dishes Combo'
+                          : getLocalizedText(dish.name, 'zh')}
                       </p>
                     </div>
-                    
+
                     <div className="text-right">
                       <span className="inline-flex items-center gap-1 bg-amber-500/10 text-[#E5B453] border border-amber-500/30 text-xs px-3 py-1 rounded-full font-black shadow-[0_0_10px_rgba(229,180,83,0.15)] select-none">
                         總量 x {dish.totalQty} 份
@@ -1652,8 +2000,8 @@ export const KitchenDisplaySystem: React.FC<KitchenDisplaySystemProps> = ({
                   {/* Body: Breakdown of tables */}
                   <div className="p-5 flex-1 min-h-[140px] space-y-4">
                     <div className="text-[11px] text-white/50 uppercase tracking-wider border-b border-white/5 pb-2 flex items-center gap-1.5 font-bold">
-                       <ChefHat size={12} className="text-[#E5B453]" />
-                       <span>各桌點單分配 (Table Breakdown)</span>
+                      <ChefHat size={12} className="text-[#E5B453]" />
+                      <span>各桌點單分配 (Table Breakdown)</span>
                     </div>
 
                     <div className="space-y-3.5 max-h-[250px] overflow-y-auto pr-1">
@@ -1661,7 +2009,10 @@ export const KitchenDisplaySystem: React.FC<KitchenDisplaySystemProps> = ({
                         const elapsed = getElapsedTime(oi.createdAt);
 
                         return (
-                          <div key={idx} className="bg-black/30 border border-white/5 p-3 rounded-lg flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 text-xs">
+                          <div
+                            key={idx}
+                            className="bg-black/30 border border-white/5 p-3 rounded-lg flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 text-xs"
+                          >
                             <div className="space-y-1.5 flex-1">
                               <div className="flex flex-wrap items-center gap-2">
                                 <span className="bg-[#E5B453] text-black font-extrabold px-1.5 py-0.5 rounded text-[10px]">
@@ -1670,8 +2021,13 @@ export const KitchenDisplaySystem: React.FC<KitchenDisplaySystemProps> = ({
                                 <span className="text-[10px] text-white/40 font-mono">
                                   單號: {oi.orderId}
                                 </span>
-                                <span className={`inline-flex items-center gap-1 text-[10px] font-bold px-1.5 py-0.5 rounded border ${elapsed.style}`}>
-                                  <Clock size={8} className={elapsed.mins > 15 ? "animate-pulse" : ""} />
+                                <span
+                                  className={`inline-flex items-center gap-1 text-[10px] font-bold px-1.5 py-0.5 rounded border ${elapsed.style}`}
+                                >
+                                  <Clock
+                                    size={8}
+                                    className={elapsed.mins > 15 ? 'animate-pulse' : ''}
+                                  />
                                   <span>已等 {elapsed.text}</span>
                                 </span>
                                 {isCloseToClosing(oi.createdAt, operatingHours) && (
@@ -1684,14 +2040,33 @@ export const KitchenDisplaySystem: React.FC<KitchenDisplaySystemProps> = ({
                               {/* customization specifications */}
                               <div className="flex flex-wrap gap-1">
                                 <span className="bg-white/5 text-white/70 border border-white/10 text-[9px] font-medium px-1 rounded">
-                                  {t('sweet')}: {oi.customization.sweetness === 0 ? t('sugarFree') : (oi.customization.sweetness === 1 ? t('sweet30') : (oi.customization.sweetness === 2 ? t('sweet50') : t('sweet100')))}
+                                  {t('sweet')}:{' '}
+                                  {oi.customization.sweetness === 0
+                                    ? t('sugarFree')
+                                    : oi.customization.sweetness === 1
+                                      ? t('sweet30')
+                                      : oi.customization.sweetness === 2
+                                        ? t('sweet50')
+                                        : t('sweet100')}
                                 </span>
                                 <span className="bg-[#FF4D4D]/5 text-[#FF4D4D] border border-[#FF4D4D]/10 text-[9px] font-medium px-1 rounded">
-                                  {t('spicyPrefix')}: {oi.customization.spiciness === 0 ? t('notSpicy') : (oi.customization.spiciness === 1 ? t('mildSpicy') : (oi.customization.spiciness === 2 ? t('mediumSpicy') : t('thaiSpicy')))}
+                                  {t('spicyPrefix')}:{' '}
+                                  {oi.customization.spiciness === 0
+                                    ? t('notSpicy')
+                                    : oi.customization.spiciness === 1
+                                      ? t('mildSpicy')
+                                      : oi.customization.spiciness === 2
+                                        ? t('mediumSpicy')
+                                        : t('thaiSpicy')}
                                 </span>
                                 {oi.customization.noodleType && (
                                   <span className="bg-[#E5B453]/5 text-[#E5B453] border border-[#E5B453]/10 text-[9px] font-medium px-1 rounded">
-                                    {t('noodlePrefix')}: {oi.customization.noodleType === 'rice-noodle' ? t('riceNoodle') : (oi.customization.noodleType === 'vermicelli' ? t('vermicelli') : t('noNoodle'))}
+                                    {t('noodlePrefix')}:{' '}
+                                    {oi.customization.noodleType === 'rice-noodle'
+                                      ? t('riceNoodle')
+                                      : oi.customization.noodleType === 'vermicelli'
+                                        ? t('vermicelli')
+                                        : t('noNoodle')}
                                   </span>
                                 )}
                                 {oi.customization.soupBase === 'coconut-milk' && (
@@ -1700,7 +2075,10 @@ export const KitchenDisplaySystem: React.FC<KitchenDisplaySystemProps> = ({
                                   </span>
                                 )}
                                 {oi.customization.selectedAddOns?.map((addOn: any) => (
-                                  <span key={addOn.id} className="bg-amber-500/5 text-amber-400 border border-amber-500/10 text-[9px] font-medium px-1 rounded">
+                                  <span
+                                    key={addOn.id}
+                                    className="bg-amber-500/5 text-amber-400 border border-amber-500/10 text-[9px] font-medium px-1 rounded"
+                                  >
                                     +{getLocalizedText(addOn.name, currentLang)}
                                   </span>
                                 ))}
@@ -1717,7 +2095,7 @@ export const KitchenDisplaySystem: React.FC<KitchenDisplaySystemProps> = ({
                               <span className="text-white text-sm font-black font-mono">
                                 x {oi.qty} 份
                               </span>
-                              
+
                               <button
                                 type="button"
                                 onClick={() => setQuickViewOrder(oi.originalOrder)}
@@ -1753,13 +2131,13 @@ export const KitchenDisplaySystem: React.FC<KitchenDisplaySystemProps> = ({
               const lateCheck = isOrderLateForPrepTime(order);
               const holdCheck = checkReservationOrderHoldStatus(order);
               return (
-                <div 
-                  key={order.id} 
+                <div
+                  key={order.id}
                   className="relative overflow-hidden rounded-xl select-none"
                   style={{ touchAction: 'pan-y' }}
                 >
                   {/* Swipe-to-Complete Background Indicator */}
-                  <div 
+                  <div
                     className="absolute inset-0 bg-gradient-to-r from-[#00C300] via-emerald-500 to-emerald-600 flex items-center justify-between px-6 rounded-xl transition-opacity duration-200"
                     style={{
                       opacity: offset > 10 ? Math.min(1, offset / 120) : 0,
@@ -1768,7 +2146,9 @@ export const KitchenDisplaySystem: React.FC<KitchenDisplaySystemProps> = ({
                     <div className="flex items-center space-x-2 text-white">
                       <Check size={18} className="stroke-[3] animate-bounce" />
                       <span className="font-sans font-black text-xs tracking-wider">
-                        {offset >= 150 ? '🎉 鬆開立即完成出餐！' : '👉 右滑直接出餐 (Swipe to complete)'}
+                        {offset >= 150
+                          ? '🎉 鬆開立即完成出餐！'
+                          : '👉 右滑直接出餐 (Swipe to complete)'}
                       </span>
                     </div>
                     {offset >= 150 && (
@@ -1783,7 +2163,9 @@ export const KitchenDisplaySystem: React.FC<KitchenDisplaySystemProps> = ({
                     id={`kds-card-${order.id}`}
                     style={{
                       transform: `translateX(${offset}px)`,
-                      transition: drag.isDragging ? 'none' : 'transform 0.25s cubic-bezier(0.16, 1, 0.3, 1)',
+                      transition: drag.isDragging
+                        ? 'none'
+                        : 'transform 0.25s cubic-bezier(0.16, 1, 0.3, 1)',
                       cursor: drag.isDragging ? 'grabbing' : 'grab',
                     }}
                     onTouchStart={(e) => handleCardTouchStart(order.id, e.touches[0].clientX)}
@@ -1812,210 +2194,282 @@ export const KitchenDisplaySystem: React.FC<KitchenDisplaySystemProps> = ({
                               ? 'border-amber-400 ring-2 ring-amber-400/60 animate-pulse bg-gradient-to-b from-amber-950/40 via-[#161616] to-[#161616] shadow-[0_0_25px_rgba(245,158,11,0.45)] font-bold'
                               : order.status === 'paid'
                                 ? 'border-emerald-500/60 ring-2 ring-emerald-500/40 bg-gradient-to-b from-emerald-950/30 via-[#161616] to-[#161616] shadow-[0_0_15px_rgba(16,185,129,0.3)]'
-                                : (order.status === 'preparing' ? 'border-sky-500/40 hover:border-sky-500' : 'border-white/10')
+                                : order.status === 'preparing'
+                                  ? 'border-sky-500/40 hover:border-sky-500'
+                                  : 'border-white/10'
                     }`}
                   >
-                  {/* Reservation Hold Status Header Banner */}
-                  {holdCheck.isHold && (
-                    <div className="bg-purple-950/90 border-b border-purple-500/40 px-4 py-2 text-left space-y-1">
-                      <div className="flex items-center justify-between gap-2">
-                        <span className="bg-purple-500 text-white font-mono font-black text-[10.5px] px-2 py-0.5 rounded tracking-wide animate-pulse">
-                          🔒 預約單廚房保留中 (HOLD)
-                        </span>
-                        <span className="text-purple-300 font-mono text-[10.5px] font-bold">
-                          {order.reservationNo || '預約單'} | 預約時間: {order.reservationDate} {order.reservationTime || ''}
-                        </span>
-                      </div>
-                      <p className="text-[10px] text-purple-200 font-sans">
-                        💡 {holdCheck.reason}
-                      </p>
-                    </div>
-                  )}
-
-                  {/* ⚠️ 桌席即將到來警示 banner */}
-                  {(() => {
-                    const now = new Date();
-                    const matchingUpcomingRes = (reservations || []).find(r => {
-                      if (String(r.tableNumber).trim() !== String(order.tableNumber).trim()) return false;
-                      if (r.status === 'upcoming') return true;
-                      if (r.status === 'pending' && r.date && r.time) {
-                        const [year, month, day] = r.date.split('-').map(Number);
-                        const [hour, minute] = r.time.split(':').map(Number);
-                        if (!isNaN(year) && !isNaN(month) && !isNaN(day) && !isNaN(hour) && !isNaN(minute)) {
-                          const resDateTime = new Date(year, month - 1, day, hour, minute);
-                          const diffMinutes = (resDateTime.getTime() - now.getTime()) / (1000 * 60);
-                          return diffMinutes > -120 && diffMinutes <= 60;
-                        }
-                      }
-                      return false;
-                    });
-                    if (!matchingUpcomingRes) return null;
-                    return (
-                      <div className="bg-amber-950/95 border-b-2 border-amber-500/50 px-4 py-2 text-left space-y-1 animate-pulse">
+                    {/* Reservation Hold Status Header Banner */}
+                    {holdCheck.isHold && (
+                      <div className="bg-purple-950/90 border-b border-purple-500/40 px-4 py-2 text-left space-y-1">
                         <div className="flex items-center justify-between gap-2">
-                          <span className="bg-amber-500 text-slate-950 font-sans font-black text-[10px] px-1.5 py-0.5 rounded tracking-wide">
-                            ⚠️ 桌位即將到來
+                          <span className="bg-purple-500 text-white font-mono font-black text-[10.5px] px-2 py-0.5 rounded tracking-wide animate-pulse">
+                            🔒 預約單廚房保留中 (HOLD)
                           </span>
-                          <span className="text-[#E5B453] font-mono text-[10px] font-black">
-                            預約時間: {matchingUpcomingRes.time}
+                          <span className="text-purple-300 font-mono text-[10.5px] font-bold">
+                            {order.reservationNo || '預約單'} | 預約時間: {order.reservationDate}{' '}
+                            {order.reservationTime || ''}
                           </span>
                         </div>
-                        <p className="text-[10px] text-zinc-300 font-sans leading-relaxed">
-                          此桌即將有預約顧客 <strong className="text-amber-400 font-black">{matchingUpcomingRes.customerName}</strong> ({matchingUpcomingRes.guestCount}人) 抵達，請盡速清理與備餐！
+                        <p className="text-[10px] text-purple-200 font-sans">
+                          💡 {holdCheck.reason}
                         </p>
                       </div>
-                    );
-                  })()}
+                    )}
 
-                  {/* Card Header */}
-                  <div className="p-3.5 sm:p-4 border-b border-white/5 flex items-center justify-between bg-black/25 shrink-0 gap-2 sm:gap-3">
-                    {/* Left Side: Order Identifiers & Collapse Toggle */}
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center space-x-2 flex-wrap gap-y-1">
-                        {/* 縮小/收合按鈕 (置於左方，避免手機版寬度不足無法點擊) */}
-                        <button
-                          type="button"
-                          onClick={() => toggleOrderCollapse(order.id)}
-                          className="p-1.5 bg-white/10 hover:bg-white/20 active:scale-95 rounded-lg border border-white/15 text-white/90 hover:text-white transition cursor-pointer shrink-0 flex items-center justify-center shadow-sm"
-                          title={collapsedOrders.has(order.id) ? "展開訂單 (Expand)" : "縮小/收合訂單 (Collapse)"}
-                          aria-label={collapsedOrders.has(order.id) ? "展開訂單" : "縮小/收合訂單"}
-                        >
-                          {collapsedOrders.has(order.id) ? <ChevronDown size={15} /> : <ChevronUp size={15} />}
-                        </button>
-                        <span className="bg-white/5 border border-white/10 text-[#E5B453] font-mono font-bold text-xs px-2.5 py-0.5 rounded shrink-0">
-                          {order.id}
-                        </span>
-                        {order.isPaid && (
-                          <span className="bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 text-[10px] font-black px-2 py-0.5 rounded shadow-[0_0_10px_rgba(16,185,129,0.2)] shrink-0">
-                            💳 櫃檯已結帳 (Paid)
+                    {/* ⚠️ 桌席即將到來警示 banner */}
+                    {(() => {
+                      const now = new Date();
+                      const matchingUpcomingRes = (reservations || []).find((r) => {
+                        if (String(r.tableNumber).trim() !== String(order.tableNumber).trim())
+                          return false;
+                        if (r.status === 'upcoming') return true;
+                        if (r.status === 'pending' && r.date && r.time) {
+                          const [year, month, day] = r.date.split('-').map(Number);
+                          const [hour, minute] = r.time.split(':').map(Number);
+                          if (
+                            !isNaN(year) &&
+                            !isNaN(month) &&
+                            !isNaN(day) &&
+                            !isNaN(hour) &&
+                            !isNaN(minute)
+                          ) {
+                            const resDateTime = new Date(year, month - 1, day, hour, minute);
+                            const diffMinutes =
+                              (resDateTime.getTime() - now.getTime()) / (1000 * 60);
+                            return diffMinutes > -120 && diffMinutes <= 60;
+                          }
+                        }
+                        return false;
+                      });
+                      if (!matchingUpcomingRes) return null;
+                      return (
+                        <div className="bg-amber-950/95 border-b-2 border-amber-500/50 px-4 py-2 text-left space-y-1 animate-pulse">
+                          <div className="flex items-center justify-between gap-2">
+                            <span className="bg-amber-500 text-slate-950 font-sans font-black text-[10px] px-1.5 py-0.5 rounded tracking-wide">
+                              ⚠️ 桌位即將到來
+                            </span>
+                            <span className="text-[#E5B453] font-mono text-[10px] font-black">
+                              預約時間: {matchingUpcomingRes.time}
+                            </span>
+                          </div>
+                          <p className="text-[10px] text-zinc-300 font-sans leading-relaxed">
+                            此桌即將有預約顧客{' '}
+                            <strong className="text-amber-400 font-black">
+                              {matchingUpcomingRes.customerName}
+                            </strong>{' '}
+                            ({matchingUpcomingRes.guestCount}人) 抵達，請盡速清理與備餐！
+                          </p>
+                        </div>
+                      );
+                    })()}
+
+                    {/* Card Header */}
+                    <div className="p-3.5 sm:p-4 border-b border-white/5 flex items-center justify-between bg-black/25 shrink-0 gap-2 sm:gap-3">
+                      {/* Left Side: Order Identifiers & Collapse Toggle */}
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center space-x-2 flex-wrap gap-y-1">
+                          {/* 縮小/收合按鈕 (置於左方，避免手機版寬度不足無法點擊) */}
+                          <button
+                            type="button"
+                            onClick={() => toggleOrderCollapse(order.id)}
+                            className="p-1.5 bg-white/10 hover:bg-white/20 active:scale-95 rounded-lg border border-white/15 text-white/90 hover:text-white transition cursor-pointer shrink-0 flex items-center justify-center shadow-sm"
+                            title={
+                              collapsedOrders.has(order.id)
+                                ? '展開訂單 (Expand)'
+                                : '縮小/收合訂單 (Collapse)'
+                            }
+                            aria-label={
+                              collapsedOrders.has(order.id) ? '展開訂單' : '縮小/收合訂單'
+                            }
+                          >
+                            {collapsedOrders.has(order.id) ? (
+                              <ChevronDown size={15} />
+                            ) : (
+                              <ChevronUp size={15} />
+                            )}
+                          </button>
+                          <span className="bg-white/5 border border-white/10 text-[#E5B453] font-mono font-bold text-xs px-2.5 py-0.5 rounded shrink-0">
+                            {order.id}
                           </span>
-                        )}
-                        {collapsedOrders.has(order.id) && (
-                          <span className="text-[10px] text-amber-300/90 bg-amber-500/10 border border-amber-500/20 px-2 py-0.5 rounded font-bold shrink-0">
-                            已收合 ({order.items.reduce((sum, item) => sum + item.qty, 0)} 份)
-                          </span>
-                        )}
-                        {editingOrderId === order.id ? (
-                          <div className="flex items-center gap-1 bg-black/40 border border-[#E5B453]/30 px-1.5 py-0.5 rounded-lg">
-                            <select
-                              value={editingTableValue}
-                              onChange={(e) => setEditingTableValue(e.target.value)}
-                              className="bg-black text-white font-bold text-xs rounded px-1.5 py-0.5 w-28 focus:outline-none focus:ring-1 focus:ring-[#E5B453]"
-                            >
-                              <optgroup label="客席就座桌號">
-                                {Array.from({ length: 12 }, (_, i) => String(i + 1)).map((num) => (
-                                  <option key={num} value={num}>
-                                    🪑 第 {num} 桌
-                                  </option>
-                                ))}
-                                {tables && tables.map((t) => (
-                                  !Array.from({ length: 12 }, (_, i) => String(i + 1)).includes(t.id) && (
-                                    <option key={t.id} value={t.id}>
-                                      🪑 第 {t.id} 桌
-                                    </option>
-                                  )
-                                ))}
-                              </optgroup>
-                              <optgroup label="外帶自取佇列">
-                                {Array.from({ length: 15 }, (_, i) => `外帶 #${i + 1}`).map((takeoutId) => (
-                                  <option key={takeoutId} value={takeoutId}>
-                                    🛍️ {takeoutId}
-                                  </option>
-                                ))}
-                              </optgroup>
-                            </select>
-                            <button
-                              type="button"
-                              onClick={async () => {
-                                if (onUpdateTableNumber) {
-                                  const res = await onUpdateTableNumber(order.id, editingTableValue);
-                                  if (res && !res.success) {
-                                    alert(res.error || '無法變更桌號');
+                          {order.isPaid && (
+                            <span className="bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 text-[10px] font-black px-2 py-0.5 rounded shadow-[0_0_10px_rgba(16,185,129,0.2)] shrink-0">
+                              💳 櫃檯已結帳 (Paid)
+                            </span>
+                          )}
+                          {collapsedOrders.has(order.id) && (
+                            <span className="text-[10px] text-amber-300/90 bg-amber-500/10 border border-amber-500/20 px-2 py-0.5 rounded font-bold shrink-0">
+                              已收合 ({order.items.reduce((sum, item) => sum + item.qty, 0)} 份)
+                            </span>
+                          )}
+                          {editingOrderId === order.id ? (
+                            <div className="flex items-center gap-1 bg-black/40 border border-[#E5B453]/30 px-1.5 py-0.5 rounded-lg">
+                              <select
+                                value={editingTableValue}
+                                onChange={(e) => setEditingTableValue(e.target.value)}
+                                className="bg-black text-white font-bold text-xs rounded px-1.5 py-0.5 w-28 focus:outline-none focus:ring-1 focus:ring-[#E5B453]"
+                              >
+                                <optgroup label="客席就座桌號">
+                                  {Array.from({ length: 12 }, (_, i) => String(i + 1)).map(
+                                    (num) => (
+                                      <option key={num} value={num}>
+                                        🪑 第 {num} 桌
+                                      </option>
+                                    ),
+                                  )}
+                                  {tables &&
+                                    tables.map(
+                                      (t) =>
+                                        !Array.from({ length: 12 }, (_, i) =>
+                                          String(i + 1),
+                                        ).includes(t.id) && (
+                                          <option key={t.id} value={t.id}>
+                                            🪑 第 {t.id} 桌
+                                          </option>
+                                        ),
+                                    )}
+                                </optgroup>
+                                <optgroup label="外帶自取佇列">
+                                  {Array.from({ length: 15 }, (_, i) => `外帶 #${i + 1}`).map(
+                                    (takeoutId) => (
+                                      <option key={takeoutId} value={takeoutId}>
+                                        🛍️ {takeoutId}
+                                      </option>
+                                    ),
+                                  )}
+                                </optgroup>
+                              </select>
+                              <button
+                                type="button"
+                                onClick={async () => {
+                                  if (onUpdateTableNumber) {
+                                    const res = await onUpdateTableNumber(
+                                      order.id,
+                                      editingTableValue,
+                                    );
+                                    if (res && !res.success) {
+                                      alert(res.error || '無法變更桌號');
+                                    } else {
+                                      order.tableNumber = editingTableValue;
+                                    }
                                   } else {
                                     order.tableNumber = editingTableValue;
                                   }
-                                } else {
-                                  order.tableNumber = editingTableValue;
-                                }
-                                setEditingOrderId(null);
-                              }}
-                              className="bg-[#E5B453] hover:bg-amber-400 text-black rounded p-1 cursor-pointer transition flex items-center justify-center font-bold"
-                              title="確認 Save"
+                                  setEditingOrderId(null);
+                                }}
+                                className="bg-[#E5B453] hover:bg-amber-400 text-black rounded p-1 cursor-pointer transition flex items-center justify-center font-bold"
+                                title="確認 Save"
+                              >
+                                <Check size={11} className="stroke-[3]" />
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setEditingOrderId(null)}
+                                className="bg-zinc-800 hover:bg-zinc-700 text-zinc-350 rounded p-1 cursor-pointer transition flex items-center justify-center font-bold"
+                                title="取消 Cancel"
+                              >
+                                <X size={11} />
+                              </button>
+                            </div>
+                          ) : (
+                            <div className="flex items-center space-x-1.5">
+                              <span className="font-bold text-base text-white font-serif">
+                                {order.tableNumber.includes('外帶')
+                                  ? `${t('takeoutLabel')}${order.tableNumber.replace('外帶', '')}`
+                                  : currentLang === 'en'
+                                    ? `${t('tableLabel')} ${order.tableNumber}`
+                                    : `${order.tableNumber} ${t('tableLabel')}`}
+                              </span>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setEditingOrderId(order.id);
+                                  setEditingTableValue(order.tableNumber);
+                                }}
+                                className="text-white/40 hover:text-[#E5B453] hover:bg-white/5 p-1 rounded transition cursor-pointer"
+                                title="變更桌號 (Change Table)"
+                              >
+                                <Edit size={12} />
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                        <div className="flex flex-wrap items-center gap-1.5 mt-1">
+                          <span className="text-[10px] text-white/40 font-mono">
+                            {currentLang === 'zh' ? '下單' : 'Order'}:{' '}
+                            {new Date(order.createdAt).toLocaleTimeString()}
+                          </span>
+                          {lateCheck.isLate && (
+                            <span
+                              className="inline-flex items-center gap-1 bg-red-500/15 text-red-400 border border-red-500/35 text-[9px] font-black px-1.5 py-0.5 rounded shadow-[0_0_8px_rgba(239,68,68,0.2)] animate-pulse"
+                              title={`等待已有 ${Math.floor(lateCheck.currentWaitMins)}分鐘，大於該單餐點平均客製工時 1.5 倍（平均: ${lateCheck.avgPrepMins.toFixed(1)}m, 超時極限: ${lateCheck.limitMins.toFixed(1)}m`}
                             >
-                              <Check size={11} className="stroke-[3]" />
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => setEditingOrderId(null)}
-                              className="bg-zinc-800 hover:bg-zinc-700 text-zinc-350 rounded p-1 cursor-pointer transition flex items-center justify-center font-bold"
-                              title="取消 Cancel"
-                            >
-                              <X size={11} />
-                            </button>
-                          </div>
-                        ) : (
-                          <div className="flex items-center space-x-1.5">
-                            <span className="font-bold text-base text-white font-serif">
-                              {order.tableNumber.includes('外帶') 
-                                ? `${t('takeoutLabel')}${order.tableNumber.replace('外帶', '')}` 
-                                : currentLang === 'en' 
-                                  ? `${t('tableLabel')} ${order.tableNumber}` 
-                                  : `${order.tableNumber} ${t('tableLabel')}`}
+                              <Timer size={10} />
+                              <span>
+                                🚨 {currentLang === 'zh' ? '製作溢時' : 'Prep Overdue'} (
+                                {Math.floor(lateCheck.currentWaitMins)}m /{' '}
+                                {currentLang === 'zh' ? '限制' : 'Limit'}{' '}
+                                {Math.floor(lateCheck.limitMins)}m)
+                              </span>
                             </span>
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setEditingOrderId(order.id);
-                                setEditingTableValue(order.tableNumber);
-                              }}
-                              className="text-white/40 hover:text-[#E5B453] hover:bg-white/5 p-1 rounded transition cursor-pointer"
-                              title="變更桌號 (Change Table)"
+                          )}
+                          {isCloseToClosing(order.createdAt, operatingHours) && (
+                            <span
+                              className="inline-flex items-center gap-1 bg-red-500/20 text-red-400 border border-red-500/30 text-[10px] font-black px-1.5 py-0.5 rounded shadow-[0_0_8px_rgba(239,68,68,0.2)] animate-pulse"
+                              title="訂單於結業前 30 分鐘內進入，請優先且速配餐"
                             >
-                              <Edit size={12} />
-                            </button>
-                          </div>
-                        )}
-                      </div>
-                      <div className="flex flex-wrap items-center gap-1.5 mt-1">
-                        <span className="text-[10px] text-white/40 font-mono">
-                          {currentLang === 'zh' ? '下單' : 'Order'}: {new Date(order.createdAt).toLocaleTimeString()}
-                        </span>
-                        {lateCheck.isLate && (
-                          <span className="inline-flex items-center gap-1 bg-red-500/15 text-red-400 border border-red-500/35 text-[9px] font-black px-1.5 py-0.5 rounded shadow-[0_0_8px_rgba(239,68,68,0.2)] animate-pulse" title={`等待已有 ${Math.floor(lateCheck.currentWaitMins)}分鐘，大於該單餐點平均客製工時 1.5 倍（平均: ${lateCheck.avgPrepMins.toFixed(1)}m, 超時極限: ${lateCheck.limitMins.toFixed(1)}m`}>
-                            <Timer size={10} />
-                            <span>🚨 {currentLang === 'zh' ? '製作溢時' : 'Prep Overdue'} ({Math.floor(lateCheck.currentWaitMins)}m / {currentLang === 'zh' ? '限制' : 'Limit'} {Math.floor(lateCheck.limitMins)}m)</span>
-                          </span>
-                        )}
-                        {isCloseToClosing(order.createdAt, operatingHours) && (
-                          <span className="inline-flex items-center gap-1 bg-red-500/20 text-red-400 border border-red-500/30 text-[10px] font-black px-1.5 py-0.5 rounded shadow-[0_0_8px_rgba(239,68,68,0.2)] animate-pulse" title="訂單於結業前 30 分鐘內進入，請優先且速配餐">
-                            <span className="w-1.5 h-1.5 rounded-full bg-red-450 animate-ping mr-0.5" />
-                            <span>{t('closingSoonRushAlert')}</span>
-                          </span>
-                        )}
-                        <button
-                          type="button"
-                          onClick={() => setQuickViewOrder(order)}
-                          className="bg-sky-500/10 hover:bg-sky-500/20 text-sky-400 border border-sky-500/10 hover:border-sky-500/30 text-[9px] font-bold px-1.5 py-0.5 rounded cursor-pointer transition flex items-center gap-1"
-                          title="單一訂單細節快速檢視 (Quick View Details)"
-                        >
-                          <Eye size={10} />
-                          <span>{t('quickViewBtn')}</span>
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            const specLines = order.items.map(it => {
-                              const spec = [
-                                it.customization.spiciness === 0 ? t('notSpicy') : (it.customization.spiciness === 1 ? t('mildSpicy') : (it.customization.spiciness === 2 ? t('mediumSpicy') : t('thaiSpicy'))),
-                                it.customization.sweetness === 0 ? t('sugarFree') : (it.customization.sweetness === 1 ? t('sweet30') : (it.customization.sweetness === 2 ? t('sweet50') : t('sweet100'))),
-                                it.customization.noodleType === 'rice-noodle' ? t('riceNoodle') : (it.customization.noodleType === 'vermicelli' ? t('vermicelli') : ''),
-                                it.customization.soupBase === 'coconut-milk' ? t('coconutMilkAdd') : '',
-                                it.customization.notes ? `${t('notesLabel')}: ${it.customization.notes}` : ''
-                              ].filter(Boolean).join('/');
-                              const itName = getLocalizedText(it.name, currentLang);
-                              return `[ ] ${itName} x ${it.qty} ${t('qtyPortion')}\n    【 ${spec} 】`;
-                            }).join('\n');
-                            const ticketStr = `
+                              <span className="w-1.5 h-1.5 rounded-full bg-red-450 animate-ping mr-0.5" />
+                              <span>{t('closingSoonRushAlert')}</span>
+                            </span>
+                          )}
+                          <button
+                            type="button"
+                            onClick={() => setQuickViewOrder(order)}
+                            className="bg-sky-500/10 hover:bg-sky-500/20 text-sky-400 border border-sky-500/10 hover:border-sky-500/30 text-[9px] font-bold px-1.5 py-0.5 rounded cursor-pointer transition flex items-center gap-1"
+                            title="單一訂單細節快速檢視 (Quick View Details)"
+                          >
+                            <Eye size={10} />
+                            <span>{t('quickViewBtn')}</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const specLines = order.items
+                                .map((it) => {
+                                  const spec = [
+                                    it.customization.spiciness === 0
+                                      ? t('notSpicy')
+                                      : it.customization.spiciness === 1
+                                        ? t('mildSpicy')
+                                        : it.customization.spiciness === 2
+                                          ? t('mediumSpicy')
+                                          : t('thaiSpicy'),
+                                    it.customization.sweetness === 0
+                                      ? t('sugarFree')
+                                      : it.customization.sweetness === 1
+                                        ? t('sweet30')
+                                        : it.customization.sweetness === 2
+                                          ? t('sweet50')
+                                          : t('sweet100'),
+                                    it.customization.noodleType === 'rice-noodle'
+                                      ? t('riceNoodle')
+                                      : it.customization.noodleType === 'vermicelli'
+                                        ? t('vermicelli')
+                                        : '',
+                                    it.customization.soupBase === 'coconut-milk'
+                                      ? t('coconutMilkAdd')
+                                      : '',
+                                    it.customization.notes
+                                      ? `${t('notesLabel')}: ${it.customization.notes}`
+                                      : '',
+                                  ]
+                                    .filter(Boolean)
+                                    .join('/');
+                                  const itName = getLocalizedText(it.name, currentLang);
+                                  return `[ ] ${itName} x ${it.qty} ${t('qtyPortion')}\n    【 ${spec} 】`;
+                                })
+                                .join('\n');
+                              const ticketStr = `
 ========================================
        沙貝燒烤 (廚房工作即時交代單)
        桌號/標記: ${order.tableNumber}
@@ -2031,504 +2485,586 @@ ${specLines}
 * KDS TICKET PRINT PREVIEW GENERATED OK *
 * 感謝廚房人員辛勞，請於出餐完畢時完成確認 *
 ========================================`.trim();
-                            setPrintConfirmData({
-                              title: `驗證列印廚房交代票 #${order.id}`,
-                              ip: printerIp,
-                              receiptType: 'kitchen',
-                              receiptBody: ticketStr,
-                              onConfirm: () => {
-                                alert(`🖨️ 虛擬網卡列印指令傳送正常！(單號: ${order.id})`);
-                              }
-                            });
-                          }}
-                          className="bg-amber-500/15 hover:bg-amber-500/25 text-amber-300 border border-[#E5B453]/20 hover:border-[#E5B453]/40 text-[9px] font-bold px-1.5 py-0.5 rounded cursor-pointer transition flex items-center gap-1"
-                          title="熱感出單前預覽虛擬收據 Print Preview and Cue"
-                        >
-                          <Printer size={10} className="text-[#E5B453]" />
-                          <span>{t('printPreviewBtn')}</span>
-                        </button>
-                      </div>
-                    </div>
-
-                    {/* Middle: Live 'Time Elapsed' wait clock & Table Occupancy Timer column (color-coded) */}
-                    <div className="flex flex-col items-center justify-center border-x border-white/5 px-2.5 min-w-[110px] gap-2">
-                      <div className="text-center w-full">
-                        <span className={`text-[9px] font-bold tracking-wider block font-sans uppercase ${
-                          order.status === 'pending' ? 'text-[#E5B453]' : 'text-sky-450'
-                        }`}>
-                          {order.status === 'pending' ? t('pendingWaitState') : t('prepState')}
-                        </span>
-                        <span className={`inline-flex items-center gap-1 text-[11px] font-black font-mono px-1.5 py-0.5 rounded border mt-0.5 ${elapsed.style}`}>
-                          <Clock size={10} className={elapsed.mins > 15 ? "animate-pulse" : ""} />
-                          <span>{elapsed.text}</span>
-                        </span>
-                        {order.status === 'pending' && elapsed.mins > 15 && (
-                          <div className="text-[8px] text-red-500 font-extrabold mt-0.5 animate-pulse uppercase tracking-tight">
-                            ⚠️ 待辦超時 Overdue
-                          </div>
-                        )}
-                      </div>
-
-                      {occ && (
-                        <div className="text-center w-full border-t border-white/5 pt-1.5">
-                          <span className="text-[9px] text-white/35 font-bold tracking-wider block font-sans uppercase" title="該桌自首筆點單起算之累計時間 (Tracks session duration for table turnover)">
-                            {order.tableNumber.includes('外帶') ? '顧客滯留 Live' : '桌況佔用 Seated'}
-                          </span>
-                          <span className={`inline-flex items-center gap-1 text-[11px] font-black font-mono px-1.5 py-0.5 rounded border mt-0.5 ${occ.style}`} title={`首筆訂單編號: #${occ.oldestOrderId}`}>
-                            <Timer size={10} className={occ.minutes >= 30 ? "animate-pulse font-bold text-[#E5B453]" : "text-sky-450"} />
-                            <span>{occ.text}</span>
-                          </span>
-                        </div>
-                      )}
-                    </div>
-
-                    {/* Right Side: Urgency Status Badge & Special Attention Flag */}
-                    <div className="text-right flex flex-col items-end justify-center gap-1.5 min-w-[70px] shrink-0">
-                      <span className={`text-[11px] font-bold px-2 py-1 rounded-lg border ${urg.style}`}>
-                        {urg.text}
-                      </span>
-                      <button
-                        type="button"
-                        onClick={() => toggleFlagState(order.id, !!order.isFlagged, order.flagReason || '')}
-                        className={`text-[10px] font-bold px-2 py-0.5 rounded flex items-center gap-1 transition-all cursor-pointer border ${
-                          order.isFlagged
-                            ? 'bg-red-500 text-white border-red-600 font-extrabold animate-pulse'
-                            : 'bg-white/5 text-red-400 border-red-500/20 hover:bg-red-500/10 hover:border-red-500/40'
-                        }`}
-                        title={order.isFlagged ? "取消特別關注標記 (Clear Flag)" : "將此訂單標記為特別關注 (Flag Order)"}
-                      >
-                        <Flag size={10} className={order.isFlagged ? "fill-white" : ""} />
-                        <span>{order.isFlagged ? "已標記關注" : "關注標記"}</span>
-                      </button>
-                    </div>
-                  </div>
-
-                  {/* Ingredients detailed tasks in Chinese */}
-                  {!collapsedOrders.has(order.id) && (
-                  <>
-                  <div className="p-5 flex-1 min-h-[140px] space-y-4">
-                    <div className="space-y-3.5">
-                      {order.items.map((it, idx) => {
-                        const menuItem = menuItems.find((mi) => mi.id === it.menuItemId);
-                        const isMatch = selectedCategory === 'all' || (menuItem && menuItem.category === selectedCategory);
-                        const canInteract = kdsRole === 'admin' || kdsRole === 'kitchen';
-                        return (
-                          <div 
-                            key={idx} 
-                            className={`flex items-center justify-between border-b border-dashed border-white/5 pb-2.5 transition-all duration-200 gap-3 ${
-                                  isMatch ? 'opacity-100' : 'opacity-20 scale-[0.98]'
-                            } ${it.isCompleted ? 'bg-emerald-950/15 px-2.5 py-1.5 rounded-lg border border-emerald-500/20' : (it.isPrepared ? 'bg-amber-950/20 px-2.5 py-1.5 rounded-lg border border-amber-500/25' : '')}`}
+                              setPrintConfirmData({
+                                title: `驗證列印廚房交代票 #${order.id}`,
+                                ip: printerIp,
+                                receiptType: 'kitchen',
+                                receiptBody: ticketStr,
+                                onConfirm: () => {
+                                  alert(`🖨️ 虛擬網卡列印指令傳送正常！(單號: ${order.id})`);
+                                },
+                              });
+                            }}
+                            className="bg-amber-500/15 hover:bg-amber-500/25 text-amber-300 border border-[#E5B453]/20 hover:border-[#E5B453]/40 text-[9px] font-bold px-1.5 py-0.5 rounded cursor-pointer transition flex items-center gap-1"
+                            title="熱感出單前預覽虛擬收據 Print Preview and Cue"
                           >
-                            <div className={`text-left flex-1 min-w-0 ${it.isCompleted ? 'opacity-40' : ''}`}>
-                              <span className={`font-bold text-white text-sm block ${it.isCompleted ? 'line-through text-zinc-400' : ''}`}>
-                                 {getLocalizedText(it.name, currentLang)} <strong className="text-[#E5B453] font-mono text-base">x {it.qty}</strong> {t('qtyPortion')}
-                                {!isMatch && (
-                                  <span className="ml-1.5 inline-block text-[9px] bg-zinc-800 text-zinc-500 font-medium px-1 rounded select-none">
-                                    非選定分區
-                                  </span>
-                                )}
-                              </span>
-
-                              {/* customize modifiers indicator */}
-                              <div className="flex flex-wrap gap-1 mt-1.5">
-                                <span className="bg-white/5 text-white/85 border border-white/15 text-[10px] font-semibold px-1 rounded font-sans">
-                                  {t('sweet')}: {it.customization.sweetness === 0 ? t('sugarFree') : (it.customization.sweetness === 1 ? t('sweet30') : (it.customization.sweetness === 2 ? t('sweet50') : t('sweet100')))}
-                                </span>
-                                <span className="bg-[#FF4D4D]/10 text-[#FF4D4D] border border-[#FF4D4D]/20 text-[10px] font-semibold px-1 rounded font-mono">
-                                  {t('spicyPrefix')}: {it.customization.spiciness === 0 ? t('notSpicy') : (it.customization.spiciness === 1 ? t('mildSpicy') : (it.customization.spiciness === 2 ? t('mediumSpicy') : t('thaiSpicy')))}
-                                </span>
-                                {it.customization.noodleType && (
-                                  <span className="bg-[#E5B453]/10 text-[#E5B453] border border-[#E5B453]/20 text-[10px] font-semibold px-1 rounded font-sans">
-                                    {t('noodlePrefix')}: {it.customization.noodleType === 'rice-noodle' ? t('riceNoodle') : (it.customization.noodleType === 'vermicelli' ? t('vermicelli') : t('noNoodle'))}
-                                  </span>
-                                )}
-                                {it.customization.soupBase === 'coconut-milk' && (
-                                  <span className="bg-amber-500/10 text-amber-500 border border-amber-500/20 text-[10px] font-semibold px-1 rounded font-mono">
-                                    {t('coconutMilkAdd')}
-                                  </span>
-                                )}
-                                {it.customization.selectedAddOns?.map((addOn) => (
-                                  <span key={addOn.id} className="bg-amber-500/10 text-amber-400 border border-amber-500/20 text-[10px] font-semibold px-1.5 py-0.5 rounded font-sans">
-                                    +{getLocalizedText(addOn.name, currentLang)}
-                                  </span>
-                                ))}
-                              </div>
-                              
-                              {it.customization.notes && (
-                                <p className="text-xs text-[#FF4D4D] bg-[#FF4D4D]/5 border border-[#FF4D4D]/15 p-2.5 rounded-xl font-sans mt-2.5">
-                                  📌 {t('notesLabel')}：{it.customization.notes}
-                                </p>
-                              )}
-                            </div>
-
-                            <div className="flex items-center gap-1.5 shrink-0">
-                              {!it.isCompleted && !it.isPrepared && (
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    if (true) {
-                                      handleItemStatusToggle(order.id, it.id, false, true);
-                                    }
-                                  }}
-                                  className="h-10 px-3 rounded-xl text-xs font-black transition-all duration-200 shadow-sm flex items-center justify-center gap-1 border cursor-pointer bg-amber-500 hover:bg-amber-400 text-slate-950 border-amber-400 shadow-amber-500/10"
-                                  title="標示為已備餐 (Mark as Prepared)"
-                                >
-                                  <ChefHat size={14} />
-                                  <span>{t('itemPreparedBtn')}</span>
-                                </button>
-                              )}
-
-                              {!it.isCompleted && it.isPrepared && (
-                                <>
-                                  <button
-                                    type="button"
-                                    onClick={() => {
-                                      if (true) {
-                                        handleItemStatusToggle(order.id, it.id, false, false);
-                                      }
-                                    }}
-                                    className="h-10 px-2 rounded-xl text-[11px] font-bold transition-all duration-200 flex items-center justify-center gap-1 border cursor-pointer bg-amber-500/20 text-amber-300 border-amber-500/40 hover:bg-amber-500/30"
-                                    title="點擊可取消已備餐狀態"
-                                  >
-                                    <ChefHat size={12} />
-                                    <span>{t('itemPreparedBtn')}</span>
-                                  </button>
-
-                                  <button
-                                    type="button"
-                                    onClick={() => {
-                                      if (true) {
-                                        handleItemStatusToggle(order.id, it.id, true, true);
-                                      }
-                                    }}
-                                    className="h-10 px-3.5 rounded-xl text-xs font-black transition-all duration-200 shadow-sm flex items-center justify-center gap-1 border cursor-pointer bg-[#1e1e1e] hover:bg-[#252525] text-emerald-400 hover:text-emerald-300 border-emerald-500/35 hover:border-emerald-500 shadow-black/20"
-                                    title="標示為製作完成 (Mark as Completed)"
-                                  >
-                                    <span>{t('itemMakeCompleteBtn')}</span>
-                                  </button>
-                                </>
-                              )}
-
-                              {it.isCompleted && (
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    if (true) {
-                                      handleItemStatusToggle(order.id, it.id, false, false);
-                                    }
-                                  }}
-                                  className="h-10 px-4 rounded-xl text-xs font-black transition-all duration-200 shadow-sm flex items-center justify-center gap-1 border cursor-pointer bg-emerald-500 hover:bg-emerald-600 text-[#0F0F0F] border-emerald-400 shadow-emerald-500/10"
-                                  title="標示為未完成 (Mark as Pending)"
-                                >
-                                  <Check size={14} className="stroke-[3]" />
-                                  <span>{t('itemCompletedBtn')}</span>
-                                </button>
-                              )}
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-
-                    {/* Special Attention Flag Section */}
-                    {((flaggingOrderId === order.id) || order.isFlagged) && (
-                      <div className="mt-4 pt-3 border-t border-dashed border-white/5 space-y-2">
-                        {flaggingOrderId === order.id && (
-                          <div className="bg-red-950/40 border border-red-500/30 rounded-lg p-2.5 space-y-2 text-left" id={`flag-editor-${order.id}`}>
-                            <div className="flex items-center justify-between">
-                              <span className="text-[10px] text-red-400 font-bold flex items-center gap-1.5 uppercase tracking-wide">
-                                <Flag size={10} className="text-red-500 fill-red-500" />
-                                特別關注原因 (Attention Reason)
-                              </span>
-                              <button
-                                type="button"
-                                onClick={() => { setFlaggingOrderId(null); setFlagError(null); }}
-                                className="text-white/40 hover:text-white p-0.5"
-                              >
-                                <X size={11} />
-                              </button>
-                            </div>
-
-                            <input
-                              type="text"
-                              value={flagReasonInput}
-                              onChange={(e) => setFlagReasonInput(e.target.value)}
-                              placeholder="請輸入關注原因（例如：餐點特製少鹽、急催出餐、湯少...）"
-                              className="w-full bg-black/60 border border-red-500/20 text-xs text-white px-2 py-1.5 rounded focus:outline-none focus:border-red-500 font-sans"
-                            />
-
-                            {flagError && (
-                              <p className="text-[9px] text-red-400 font-mono text-left">{flagError}</p>
-                            )}
-
-                            <div className="flex justify-end gap-1.5">
-                              <button
-                                type="button"
-                                onClick={() => { setFlaggingOrderId(null); setFlagError(null); }}
-                                className="bg-white/5 hover:bg-white/10 text-zinc-300 border border-white/5 text-[10px] px-2 py-0.5 rounded transition font-bold"
-                              >
-                                取消
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => submitFlagReason(order.id)}
-                                className="bg-red-500 hover:bg-red-600 text-white text-[10px] px-2.5 py-0.5 rounded transition font-black"
-                              >
-                                確定標記
-                              </button>
-                            </div>
-                          </div>
-                        )}
-
-                        {order.isFlagged && (
-                          <div className="bg-red-500/10 border-2 border-red-500/30 rounded-lg p-3 space-y-1 text-left animate-pulse" id={`active-flag-${order.id}`}>
-                            <div className="flex items-center justify-between">
-                              <span className="text-[11px] text-red-500 font-extrabold flex items-center gap-1.5 uppercase tracking-wider">
-                                <AlertTriangle size={12} className="text-red-500" />
-                                🛑 特別關注 ORDER FLAGGED
-                              </span>
-                              <button
-                                type="button"
-                                onClick={() => toggleFlagState(order.id, true, '')}
-                                className="text-zinc-400 hover:text-red-500 text-[10px] font-bold border border-red-500/20 px-1.5 py-0.2 rounded hover:bg-red-500/10"
-                              >
-                                取消關注
-                              </button>
-                            </div>
-                            <p className="text-xs text-red-400 font-bold bg-black/30 p-2 rounded border border-red-500/15 mt-1 font-sans">
-                              ⚠️ 原因：{order.flagReason || "店員未備註具體原因"}
-                            </p>
-                          </div>
-                        )}
-                      </div>
-                    )}
-
-                    {/* Quick Notes Section */}
-                    <div className="mt-4 pt-3 border-t border-dashed border-white/5 space-y-2">
-                      <div className="flex items-center justify-between">
-                        <span className="text-[10px] text-white/40 font-bold flex items-center gap-1">
-                          <Mic size={10} className="text-[#E5B453]" />
-                          KDS 快速備註 (Quick Notes/Dictations)
-                        </span>
-                        {/* Micro-microphone trigger */}
-                        <button
-                          type="button"
-                          onClick={() => startDictation(order.id)}
-                          className={`text-[10px] font-bold px-1.5 py-0.5 rounded border flex items-center gap-1 transition-all cursor-pointer ${
-                            dictatingOrderId === order.id && isDictating
-                              ? 'bg-red-500/20 text-red-500 border-red-500/40 animate-pulse font-black'
-                              : 'bg-white/5 text-[#E5B453] border-white/10 hover:bg-white/10'
-                          }`}
-                        >
-                          {dictatingOrderId === order.id && isDictating ? (
-                            <>
-                              <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-ping" />
-                              <span>正在錄音...</span>
-                            </>
-                          ) : (
-                            <>
-                              <Mic size={10} />
-                              <span>🎙️ 語音語音</span>
-                            </>
-                          )}
-                        </button>
-                      </div>
-
-                      {dictatingOrderId === order.id && (
-                        <div className="bg-black/40 border border-[#E5B453]/20 rounded-lg p-2 space-y-2">
-                          {/* Listening Wave Simulation */}
-                          {isDictating && (
-                            <div className="flex items-center gap-1 justify-center py-1">
-                              <span className="w-1 h-3 bg-red-400 rounded animate-bounce [animation-delay:-0.3s]" />
-                              <span className="w-1 h-5 bg-red-500 rounded animate-bounce [animation-delay:-0.15s]" />
-                              <span className="w-1 h-4 bg-red-400 rounded animate-bounce" />
-                              <span className="w-1 h-2 bg-red-300 rounded animate-bounce [animation-delay:-0.45s]" />
-                            </div>
-                          )}
-                          
-                          <textarea
-                            className="w-full bg-black/60 border border-white/10 text-xs text-white p-1.5 rounded focus:outline-none focus:border-[#E5B453] text-left font-sans h-12 resize-none"
-                            placeholder={isDictating ? "正在傾聽並將語音轉換成文字..." : "請按下方按鈕或在此輸入備註/口頭指令..."}
-                            value={dictatedText}
-                            onChange={(e) => setDictatedText(e.target.value)}
-                          />
-
-                          {noteError && (
-                            <p className="text-[9px] text-red-400 text-left font-mono">{noteError}</p>
-                          )}
-
-                          <div className="flex justify-end gap-1.5">
-                            <button
-                              type="button"
-                              onClick={cancelDictation}
-                              className="bg-white/5 hover:bg-white/10 text-zinc-300 border border-white/5 text-[10px] px-2 py-0.5 rounded transition font-bold"
-                            >
-                              取消
-                            </button>
-                            {isDictating && (
-                              <button
-                                type="button"
-                                onClick={stopRecordingAndParse}
-                                className="bg-[#E5B453] hover:bg-[#F0C46B] text-[#0F0F0F] text-[10px] px-2 py-0.5 rounded transition font-black"
-                              >
-                                停止/解析
-                              </button>
-                            )}
-                            <button
-                              type="button"
-                              onClick={() => saveDictatedNote(order.id)}
-                              className="bg-[#00C300] hover:bg-[#00E500] text-black text-[10px] px-2 py-0.5 rounded transition font-black"
-                            >
-                              儲存備註
-                            </button>
-                          </div>
+                            <Printer size={10} className="text-[#E5B453]" />
+                            <span>{t('printPreviewBtn')}</span>
+                          </button>
                         </div>
-                      )}
+                      </div>
 
-                      {order.quickNotes ? (
-                        <div className="bg-[#E5B453]/5 border border-[#E5B453]/25 rounded-lg p-2 flex items-start justify-between gap-1.5 text-left">
-                          <div className="space-y-1">
-                            <p className="text-[11px] text-[#E5B453] font-bold font-sans">
-                              📝 {order.quickNotes}
-                            </p>
-                            <span className="text-[8px] text-zinc-500 font-mono">
-                              經 KDS Dictate 語音處理
+                      {/* Middle: Live 'Time Elapsed' wait clock & Table Occupancy Timer column (color-coded) */}
+                      <div className="flex flex-col items-center justify-center border-x border-white/5 px-2.5 min-w-[110px] gap-2">
+                        <div className="text-center w-full">
+                          <span
+                            className={`text-[9px] font-bold tracking-wider block font-sans uppercase ${
+                              order.status === 'pending' ? 'text-[#E5B453]' : 'text-sky-450'
+                            }`}
+                          >
+                            {order.status === 'pending' ? t('pendingWaitState') : t('prepState')}
+                          </span>
+                          <span
+                            className={`inline-flex items-center gap-1 text-[11px] font-black font-mono px-1.5 py-0.5 rounded border mt-0.5 ${elapsed.style}`}
+                          >
+                            <Clock size={10} className={elapsed.mins > 15 ? 'animate-pulse' : ''} />
+                            <span>{elapsed.text}</span>
+                          </span>
+                          {order.status === 'pending' && elapsed.mins > 15 && (
+                            <div className="text-[8px] text-red-500 font-extrabold mt-0.5 animate-pulse uppercase tracking-tight">
+                              ⚠️ 待辦超時 Overdue
+                            </div>
+                          )}
+                        </div>
+
+                        {occ && (
+                          <div className="text-center w-full border-t border-white/5 pt-1.5">
+                            <span
+                              className="text-[9px] text-white/35 font-bold tracking-wider block font-sans uppercase"
+                              title="該桌自首筆點單起算之累計時間 (Tracks session duration for table turnover)"
+                            >
+                              {order.tableNumber.includes('外帶')
+                                ? '顧客滯留 Live'
+                                : '桌況佔用 Seated'}
+                            </span>
+                            <span
+                              className={`inline-flex items-center gap-1 text-[11px] font-black font-mono px-1.5 py-0.5 rounded border mt-0.5 ${occ.style}`}
+                              title={`首筆訂單編號: #${occ.oldestOrderId}`}
+                            >
+                              <Timer
+                                size={10}
+                                className={
+                                  occ.minutes >= 30
+                                    ? 'animate-pulse font-bold text-[#E5B453]'
+                                    : 'text-sky-450'
+                                }
+                              />
+                              <span>{occ.text}</span>
                             </span>
                           </div>
-                          <button
-                            type="button"
-                            onClick={() => clearQuickNote(order.id)}
-                            className="text-zinc-500 hover:text-[#FF4D4D] p-0.5 transition cursor-pointer"
-                            title="清除備註"
-                          >
-                            <X size={12} />
-                          </button>
-                        </div>
-                      ) : (
-                        !dictatingOrderId && (
-                          <p className="text-[9px] text-zinc-500 italic block text-left">
-                            暫無臨時備註，可使用麥克風錄製或口述
-                          </p>
-                        )
-                      )}
-                    </div>
-                  </div>
-
-                  {/* Interactive Status updater actions */}
-                  <div className="p-4 bg-black/20 border-t border-white/5 flex items-center justify-between shrink-0">
-                    <div className="flex flex-col gap-0.5 text-left">
-                      <span className="text-white/40 text-[10px] font-bold uppercase font-mono flex items-center gap-1">
-                        <span>付費: {order.paymentMethod.toUpperCase()}</span>
-                        {order.isPaid && (
-                          <span className="bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 text-[9px] font-black px-1.5 py-0.2 rounded">
-                            💳 已結帳
-                          </span>
                         )}
-                      </span>
-                      <span className="text-[9px] text-[#00C300]/75 font-black tracking-wide animate-pulse select-none hidden sm:inline-block">
-                        🤝 支援右滑直接出餐 Complete
-                      </span>
+                      </div>
+
+                      {/* Right Side: Urgency Status Badge & Special Attention Flag */}
+                      <div className="text-right flex flex-col items-end justify-center gap-1.5 min-w-[70px] shrink-0">
+                        <span
+                          className={`text-[11px] font-bold px-2 py-1 rounded-lg border ${urg.style}`}
+                        >
+                          {urg.text}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            toggleFlagState(order.id, !!order.isFlagged, order.flagReason || '')
+                          }
+                          className={`text-[10px] font-bold px-2 py-0.5 rounded flex items-center gap-1 transition-all cursor-pointer border ${
+                            order.isFlagged
+                              ? 'bg-red-500 text-white border-red-600 font-extrabold animate-pulse'
+                              : 'bg-white/5 text-red-400 border-red-500/20 hover:bg-red-500/10 hover:border-red-500/40'
+                          }`}
+                          title={
+                            order.isFlagged
+                              ? '取消特別關注標記 (Clear Flag)'
+                              : '將此訂單標記為特別關注 (Flag Order)'
+                          }
+                        >
+                          <Flag size={10} className={order.isFlagged ? 'fill-white' : ''} />
+                          <span>{order.isFlagged ? '已標記關注' : '關注標記'}</span>
+                        </button>
+                      </div>
                     </div>
 
-                    <div className="flex space-x-1.5">
-                      {order.status === 'pending' && (
-                        <>
-                          <button
-                            id={`kds-accept-btn-${order.id}`}
-                            onClick={() => handleStatusChange(order.id, 'preparing')}
-                            className="bg-emerald-500 hover:bg-emerald-400 text-slate-950 px-3.5 py-1.5 rounded-lg font-black text-xs flex items-center space-x-1 transition cursor-pointer animate-pulse ring-2 ring-emerald-400/60 shadow-lg shadow-emerald-500/20"
-                          >
-                            <Check size={13} className="stroke-[3]" />
-                            <span>{t('acceptOrderBtn')}</span>
-                          </button>
-                          
-                          <button
-                            id={`kds-decline-btn-${order.id}`}
-                            onClick={() => handleStatusChange(order.id, 'cancelled')}
-                            className="bg-rose-500/10 hover:bg-rose-500/25 text-rose-500 border border-rose-500/20 px-3.5 py-1.5 rounded-lg font-black text-xs flex items-center space-x-1 transition cursor-pointer"
-                          >
-                            <X size={13} className="stroke-[3]" />
-                            <span>{t('declineOrderBtn')}</span>
-                          </button>
-                        </>
-                      )}
+                    {/* Ingredients detailed tasks in Chinese */}
+                    {!collapsedOrders.has(order.id) && (
+                      <>
+                        <div className="p-5 flex-1 min-h-[140px] space-y-4">
+                          <div className="space-y-3.5">
+                            {order.items.map((it, idx) => {
+                              const menuItem = menuItems.find((mi) => mi.id === it.menuItemId);
+                              const isMatch =
+                                selectedCategory === 'all' ||
+                                (menuItem && menuItem.category === selectedCategory);
+                              const canInteract = kdsRole === 'admin' || kdsRole === 'kitchen';
+                              return (
+                                <div
+                                  key={idx}
+                                  className={`flex items-center justify-between border-b border-dashed border-white/5 pb-2.5 transition-all duration-200 gap-3 ${
+                                    isMatch ? 'opacity-100' : 'opacity-20 scale-[0.98]'
+                                  } ${it.isCompleted ? 'bg-emerald-950/15 px-2.5 py-1.5 rounded-lg border border-emerald-500/20' : it.isPrepared ? 'bg-amber-950/20 px-2.5 py-1.5 rounded-lg border border-amber-500/25' : ''}`}
+                                >
+                                  <div
+                                    className={`text-left flex-1 min-w-0 ${it.isCompleted ? 'opacity-40' : ''}`}
+                                  >
+                                    <span
+                                      className={`font-bold text-white text-sm block ${it.isCompleted ? 'line-through text-zinc-400' : ''}`}
+                                    >
+                                      {getLocalizedText(it.name, currentLang)}{' '}
+                                      <strong className="text-[#E5B453] font-mono text-base">
+                                        x {it.qty}
+                                      </strong>{' '}
+                                      {t('qtyPortion')}
+                                      {!isMatch && (
+                                        <span className="ml-1.5 inline-block text-[9px] bg-zinc-800 text-zinc-500 font-medium px-1 rounded select-none">
+                                          非選定分區
+                                        </span>
+                                      )}
+                                    </span>
 
-                      {order.status === 'preparing' && (
-                        <>
-                          <button
-                            id={`kds-complete-btn-${order.id}`}
-                            onClick={() => handleStatusChange(order.id, 'completed')}
-                            className="bg-[#00C300] hover:bg-emerald-500 text-[#0F0F0F] px-4 py-1.5 rounded-lg font-black text-xs flex items-center space-x-1 transition cursor-pointer animate-pulse"
-                          >
-                            <Check size={13} />
-                            <span>出餐完成</span>
-                          </button>
+                                    {/* customize modifiers indicator */}
+                                    <div className="flex flex-wrap gap-1 mt-1.5">
+                                      <span className="bg-white/5 text-white/85 border border-white/15 text-[10px] font-semibold px-1 rounded font-sans">
+                                        {t('sweet')}:{' '}
+                                        {it.customization.sweetness === 0
+                                          ? t('sugarFree')
+                                          : it.customization.sweetness === 1
+                                            ? t('sweet30')
+                                            : it.customization.sweetness === 2
+                                              ? t('sweet50')
+                                              : t('sweet100')}
+                                      </span>
+                                      <span className="bg-[#FF4D4D]/10 text-[#FF4D4D] border border-[#FF4D4D]/20 text-[10px] font-semibold px-1 rounded font-mono">
+                                        {t('spicyPrefix')}:{' '}
+                                        {it.customization.spiciness === 0
+                                          ? t('notSpicy')
+                                          : it.customization.spiciness === 1
+                                            ? t('mildSpicy')
+                                            : it.customization.spiciness === 2
+                                              ? t('mediumSpicy')
+                                              : t('thaiSpicy')}
+                                      </span>
+                                      {it.customization.noodleType && (
+                                        <span className="bg-[#E5B453]/10 text-[#E5B453] border border-[#E5B453]/20 text-[10px] font-semibold px-1 rounded font-sans">
+                                          {t('noodlePrefix')}:{' '}
+                                          {it.customization.noodleType === 'rice-noodle'
+                                            ? t('riceNoodle')
+                                            : it.customization.noodleType === 'vermicelli'
+                                              ? t('vermicelli')
+                                              : t('noNoodle')}
+                                        </span>
+                                      )}
+                                      {it.customization.soupBase === 'coconut-milk' && (
+                                        <span className="bg-amber-500/10 text-amber-500 border border-amber-500/20 text-[10px] font-semibold px-1 rounded font-mono">
+                                          {t('coconutMilkAdd')}
+                                        </span>
+                                      )}
+                                      {it.customization.selectedAddOns?.map((addOn) => (
+                                        <span
+                                          key={addOn.id}
+                                          className="bg-amber-500/10 text-amber-400 border border-amber-500/20 text-[10px] font-semibold px-1.5 py-0.5 rounded font-sans"
+                                        >
+                                          +{getLocalizedText(addOn.name, currentLang)}
+                                        </span>
+                                      ))}
+                                    </div>
 
-                          <button
-                            id={`kds-cancel-btn-${order.id}`}
-                            onClick={() => handleStatusChange(order.id, 'cancelled')}
-                            className="bg-[#FF4D4D]/10 hover:bg-[#FF4D4D]/25 text-[#FF4D4D] border border-rose-500/20 px-2.5 py-1.5 rounded-lg font-bold text-xs flex items-center space-x-1 transition cursor-pointer"
-                            title="取消此單"
-                          >
-                            <Ban size={12} />
-                            <span>刪除</span>
-                          </button>
-                        </>
-                      )}
+                                    {it.customization.notes && (
+                                      <p className="text-xs text-[#FF4D4D] bg-[#FF4D4D]/5 border border-[#FF4D4D]/15 p-2.5 rounded-xl font-sans mt-2.5">
+                                        📌 {t('notesLabel')}：{it.customization.notes}
+                                      </p>
+                                    )}
+                                  </div>
 
-                      {order.status === 'paid' && (
-                        <>
-                          <button
-                            id={`kds-paid-complete-btn-${order.id}`}
-                            onClick={async () => {
-                              playStatusBeepSound();
-                              setBeepSim(true);
-                              setTimeout(() => setBeepSim(false), 800);
-                              try {
-                                const res = await apiFetch(`/api/orders/${order.id}/complete`, {
-                                  method: 'PUT',
-                                  headers: { 'Content-Type': 'application/json' },
-                                });
-                                if (res.ok) {
-                                  await onUpdateOrderStatus(order.id, 'completed');
-                                }
-                              } catch (err) {
-                                console.warn('[KDS] Complete paid order failed:', err);
-                                await onUpdateOrderStatus(order.id, 'completed');
-                              }
-                            }}
-                            className="bg-[#00C300] hover:bg-emerald-500 text-[#0F0F0F] px-4 py-1.5 rounded-lg font-black text-xs flex items-center space-x-1.5 transition cursor-pointer animate-pulse ring-2 ring-emerald-400/60 shadow-lg shadow-emerald-500/20"
-                          >
-                            <Check size={13} className="stroke-[3]" />
-                            <span>出餐完成</span>
-                          </button>
+                                  <div className="flex items-center gap-1.5 shrink-0">
+                                    {!it.isCompleted && !it.isPrepared && (
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          if (true) {
+                                            handleItemStatusToggle(order.id, it.id, false, true);
+                                          }
+                                        }}
+                                        className="h-10 px-3 rounded-xl text-xs font-black transition-all duration-200 shadow-sm flex items-center justify-center gap-1 border cursor-pointer bg-amber-500 hover:bg-amber-400 text-slate-950 border-amber-400 shadow-amber-500/10"
+                                        title="標示為已備餐 (Mark as Prepared)"
+                                      >
+                                        <ChefHat size={14} />
+                                        <span>{t('itemPreparedBtn')}</span>
+                                      </button>
+                                    )}
 
-                          <span className="text-emerald-400 text-[10px] font-bold flex items-center space-x-0.5 bg-emerald-500/10 border border-emerald-500/30 px-2 py-1 rounded-lg">
-                            <span>💳 已結帳</span>
-                          </span>
-                        </>
-                      )}
+                                    {!it.isCompleted && it.isPrepared && (
+                                      <>
+                                        <button
+                                          type="button"
+                                          onClick={() => {
+                                            if (true) {
+                                              handleItemStatusToggle(order.id, it.id, false, false);
+                                            }
+                                          }}
+                                          className="h-10 px-2 rounded-xl text-[11px] font-bold transition-all duration-200 flex items-center justify-center gap-1 border cursor-pointer bg-amber-500/20 text-amber-300 border-amber-500/40 hover:bg-amber-500/30"
+                                          title="點擊可取消已備餐狀態"
+                                        >
+                                          <ChefHat size={12} />
+                                          <span>{t('itemPreparedBtn')}</span>
+                                        </button>
 
-                      {order.status === 'completed' && (
-                        <span className="text-[#00C300] text-xs font-bold flex items-center space-x-0.5">
-                          <Check size={14} />
-                          <span>已順利出餐 Done</span>
-                        </span>
-                      )}
+                                        <button
+                                          type="button"
+                                          onClick={() => {
+                                            if (true) {
+                                              handleItemStatusToggle(order.id, it.id, true, true);
+                                            }
+                                          }}
+                                          className="h-10 px-3.5 rounded-xl text-xs font-black transition-all duration-200 shadow-sm flex items-center justify-center gap-1 border cursor-pointer bg-[#1e1e1e] hover:bg-[#252525] text-emerald-400 hover:text-emerald-300 border-emerald-500/35 hover:border-emerald-500 shadow-black/20"
+                                          title="標示為製作完成 (Mark as Completed)"
+                                        >
+                                          <span>{t('itemMakeCompleteBtn')}</span>
+                                        </button>
+                                      </>
+                                    )}
 
-                      {order.status === 'cancelled' && (
-                        <span className="text-white/30 text-xs font-bold line-through">
-                          已廢棄 Cancel
-                        </span>
-                      )}
-                    </div>
+                                    {it.isCompleted && (
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          if (true) {
+                                            handleItemStatusToggle(order.id, it.id, false, false);
+                                          }
+                                        }}
+                                        className="h-10 px-4 rounded-xl text-xs font-black transition-all duration-200 shadow-sm flex items-center justify-center gap-1 border cursor-pointer bg-emerald-500 hover:bg-emerald-600 text-[#0F0F0F] border-emerald-400 shadow-emerald-500/10"
+                                        title="標示為未完成 (Mark as Pending)"
+                                      >
+                                        <Check size={14} className="stroke-[3]" />
+                                        <span>{t('itemCompletedBtn')}</span>
+                                      </button>
+                                    )}
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+
+                          {/* Special Attention Flag Section */}
+                          {(flaggingOrderId === order.id || order.isFlagged) && (
+                            <div className="mt-4 pt-3 border-t border-dashed border-white/5 space-y-2">
+                              {flaggingOrderId === order.id && (
+                                <div
+                                  className="bg-red-950/40 border border-red-500/30 rounded-lg p-2.5 space-y-2 text-left"
+                                  id={`flag-editor-${order.id}`}
+                                >
+                                  <div className="flex items-center justify-between">
+                                    <span className="text-[10px] text-red-400 font-bold flex items-center gap-1.5 uppercase tracking-wide">
+                                      <Flag size={10} className="text-red-500 fill-red-500" />
+                                      特別關注原因 (Attention Reason)
+                                    </span>
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setFlaggingOrderId(null);
+                                        setFlagError(null);
+                                      }}
+                                      className="text-white/40 hover:text-white p-0.5"
+                                    >
+                                      <X size={11} />
+                                    </button>
+                                  </div>
+
+                                  <input
+                                    type="text"
+                                    value={flagReasonInput}
+                                    onChange={(e) => setFlagReasonInput(e.target.value)}
+                                    placeholder="請輸入關注原因（例如：餐點特製少鹽、急催出餐、湯少...）"
+                                    className="w-full bg-black/60 border border-red-500/20 text-xs text-white px-2 py-1.5 rounded focus:outline-none focus:border-red-500 font-sans"
+                                  />
+
+                                  {flagError && (
+                                    <p className="text-[9px] text-red-400 font-mono text-left">
+                                      {flagError}
+                                    </p>
+                                  )}
+
+                                  <div className="flex justify-end gap-1.5">
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setFlaggingOrderId(null);
+                                        setFlagError(null);
+                                      }}
+                                      className="bg-white/5 hover:bg-white/10 text-zinc-300 border border-white/5 text-[10px] px-2 py-0.5 rounded transition font-bold"
+                                    >
+                                      取消
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => submitFlagReason(order.id)}
+                                      className="bg-red-500 hover:bg-red-600 text-white text-[10px] px-2.5 py-0.5 rounded transition font-black"
+                                    >
+                                      確定標記
+                                    </button>
+                                  </div>
+                                </div>
+                              )}
+
+                              {order.isFlagged && (
+                                <div
+                                  className="bg-red-500/10 border-2 border-red-500/30 rounded-lg p-3 space-y-1 text-left animate-pulse"
+                                  id={`active-flag-${order.id}`}
+                                >
+                                  <div className="flex items-center justify-between">
+                                    <span className="text-[11px] text-red-500 font-extrabold flex items-center gap-1.5 uppercase tracking-wider">
+                                      <AlertTriangle size={12} className="text-red-500" />
+                                      🛑 特別關注 ORDER FLAGGED
+                                    </span>
+                                    <button
+                                      type="button"
+                                      onClick={() => toggleFlagState(order.id, true, '')}
+                                      className="text-zinc-400 hover:text-red-500 text-[10px] font-bold border border-red-500/20 px-1.5 py-0.2 rounded hover:bg-red-500/10"
+                                    >
+                                      取消關注
+                                    </button>
+                                  </div>
+                                  <p className="text-xs text-red-400 font-bold bg-black/30 p-2 rounded border border-red-500/15 mt-1 font-sans">
+                                    ⚠️ 原因：{order.flagReason || '店員未備註具體原因'}
+                                  </p>
+                                </div>
+                              )}
+                            </div>
+                          )}
+
+                          {/* Quick Notes Section */}
+                          <div className="mt-4 pt-3 border-t border-dashed border-white/5 space-y-2">
+                            <div className="flex items-center justify-between">
+                              <span className="text-[10px] text-white/40 font-bold flex items-center gap-1">
+                                <Mic size={10} className="text-[#E5B453]" />
+                                KDS 快速備註 (Quick Notes/Dictations)
+                              </span>
+                              {/* Micro-microphone trigger */}
+                              <button
+                                type="button"
+                                onClick={() => startDictation(order.id)}
+                                className={`text-[10px] font-bold px-1.5 py-0.5 rounded border flex items-center gap-1 transition-all cursor-pointer ${
+                                  dictatingOrderId === order.id && isDictating
+                                    ? 'bg-red-500/20 text-red-500 border-red-500/40 animate-pulse font-black'
+                                    : 'bg-white/5 text-[#E5B453] border-white/10 hover:bg-white/10'
+                                }`}
+                              >
+                                {dictatingOrderId === order.id && isDictating ? (
+                                  <>
+                                    <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-ping" />
+                                    <span>正在錄音...</span>
+                                  </>
+                                ) : (
+                                  <>
+                                    <Mic size={10} />
+                                    <span>🎙️ 語音語音</span>
+                                  </>
+                                )}
+                              </button>
+                            </div>
+
+                            {dictatingOrderId === order.id && (
+                              <div className="bg-black/40 border border-[#E5B453]/20 rounded-lg p-2 space-y-2">
+                                {/* Listening Wave Simulation */}
+                                {isDictating && (
+                                  <div className="flex items-center gap-1 justify-center py-1">
+                                    <span className="w-1 h-3 bg-red-400 rounded animate-bounce [animation-delay:-0.3s]" />
+                                    <span className="w-1 h-5 bg-red-500 rounded animate-bounce [animation-delay:-0.15s]" />
+                                    <span className="w-1 h-4 bg-red-400 rounded animate-bounce" />
+                                    <span className="w-1 h-2 bg-red-300 rounded animate-bounce [animation-delay:-0.45s]" />
+                                  </div>
+                                )}
+
+                                <textarea
+                                  className="w-full bg-black/60 border border-white/10 text-xs text-white p-1.5 rounded focus:outline-none focus:border-[#E5B453] text-left font-sans h-12 resize-none"
+                                  placeholder={
+                                    isDictating
+                                      ? '正在傾聽並將語音轉換成文字...'
+                                      : '請按下方按鈕或在此輸入備註/口頭指令...'
+                                  }
+                                  value={dictatedText}
+                                  onChange={(e) => setDictatedText(e.target.value)}
+                                />
+
+                                {noteError && (
+                                  <p className="text-[9px] text-red-400 text-left font-mono">
+                                    {noteError}
+                                  </p>
+                                )}
+
+                                <div className="flex justify-end gap-1.5">
+                                  <button
+                                    type="button"
+                                    onClick={cancelDictation}
+                                    className="bg-white/5 hover:bg-white/10 text-zinc-300 border border-white/5 text-[10px] px-2 py-0.5 rounded transition font-bold"
+                                  >
+                                    取消
+                                  </button>
+                                  {isDictating && (
+                                    <button
+                                      type="button"
+                                      onClick={stopRecordingAndParse}
+                                      className="bg-[#E5B453] hover:bg-[#F0C46B] text-[#0F0F0F] text-[10px] px-2 py-0.5 rounded transition font-black"
+                                    >
+                                      停止/解析
+                                    </button>
+                                  )}
+                                  <button
+                                    type="button"
+                                    onClick={() => saveDictatedNote(order.id)}
+                                    className="bg-[#00C300] hover:bg-[#00E500] text-black text-[10px] px-2 py-0.5 rounded transition font-black"
+                                  >
+                                    儲存備註
+                                  </button>
+                                </div>
+                              </div>
+                            )}
+
+                            {order.quickNotes ? (
+                              <div className="bg-[#E5B453]/5 border border-[#E5B453]/25 rounded-lg p-2 flex items-start justify-between gap-1.5 text-left">
+                                <div className="space-y-1">
+                                  <p className="text-[11px] text-[#E5B453] font-bold font-sans">
+                                    📝 {order.quickNotes}
+                                  </p>
+                                  <span className="text-[8px] text-zinc-500 font-mono">
+                                    經 KDS Dictate 語音處理
+                                  </span>
+                                </div>
+                                <button
+                                  type="button"
+                                  onClick={() => clearQuickNote(order.id)}
+                                  className="text-zinc-500 hover:text-[#FF4D4D] p-0.5 transition cursor-pointer"
+                                  title="清除備註"
+                                >
+                                  <X size={12} />
+                                </button>
+                              </div>
+                            ) : (
+                              !dictatingOrderId && (
+                                <p className="text-[9px] text-zinc-500 italic block text-left">
+                                  暫無臨時備註，可使用麥克風錄製或口述
+                                </p>
+                              )
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Interactive Status updater actions */}
+                        <div className="p-4 bg-black/20 border-t border-white/5 flex items-center justify-between shrink-0">
+                          <div className="flex flex-col gap-0.5 text-left">
+                            <span className="text-white/40 text-[10px] font-bold uppercase font-mono flex items-center gap-1">
+                              <span>付費: {order.paymentMethod.toUpperCase()}</span>
+                              {order.isPaid && (
+                                <span className="bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 text-[9px] font-black px-1.5 py-0.2 rounded">
+                                  💳 已結帳
+                                </span>
+                              )}
+                            </span>
+                            <span className="text-[9px] text-[#00C300]/75 font-black tracking-wide animate-pulse select-none hidden sm:inline-block">
+                              🤝 支援右滑直接出餐 Complete
+                            </span>
+                          </div>
+
+                          <div className="flex space-x-1.5">
+                            {order.status === 'pending' && (
+                              <>
+                                <button
+                                  id={`kds-accept-btn-${order.id}`}
+                                  onClick={() => handleStatusChange(order.id, 'preparing')}
+                                  className="bg-emerald-500 hover:bg-emerald-400 text-slate-950 px-3.5 py-1.5 rounded-lg font-black text-xs flex items-center space-x-1 transition cursor-pointer animate-pulse ring-2 ring-emerald-400/60 shadow-lg shadow-emerald-500/20"
+                                >
+                                  <Check size={13} className="stroke-[3]" />
+                                  <span>{t('acceptOrderBtn')}</span>
+                                </button>
+
+                                <button
+                                  id={`kds-decline-btn-${order.id}`}
+                                  onClick={() => handleStatusChange(order.id, 'cancelled')}
+                                  className="bg-rose-500/10 hover:bg-rose-500/25 text-rose-500 border border-rose-500/20 px-3.5 py-1.5 rounded-lg font-black text-xs flex items-center space-x-1 transition cursor-pointer"
+                                >
+                                  <X size={13} className="stroke-[3]" />
+                                  <span>{t('declineOrderBtn')}</span>
+                                </button>
+                              </>
+                            )}
+
+                            {order.status === 'preparing' && (
+                              <>
+                                <button
+                                  id={`kds-complete-btn-${order.id}`}
+                                  onClick={() => handleStatusChange(order.id, 'completed')}
+                                  className="bg-[#00C300] hover:bg-emerald-500 text-[#0F0F0F] px-4 py-1.5 rounded-lg font-black text-xs flex items-center space-x-1 transition cursor-pointer animate-pulse"
+                                >
+                                  <Check size={13} />
+                                  <span>出餐完成</span>
+                                </button>
+
+                                <button
+                                  id={`kds-cancel-btn-${order.id}`}
+                                  onClick={() => handleStatusChange(order.id, 'cancelled')}
+                                  className="bg-[#FF4D4D]/10 hover:bg-[#FF4D4D]/25 text-[#FF4D4D] border border-rose-500/20 px-2.5 py-1.5 rounded-lg font-bold text-xs flex items-center space-x-1 transition cursor-pointer"
+                                  title="取消此單"
+                                >
+                                  <Ban size={12} />
+                                  <span>刪除</span>
+                                </button>
+                              </>
+                            )}
+
+                            {order.status === 'paid' && (
+                              <>
+                                <button
+                                  id={`kds-paid-complete-btn-${order.id}`}
+                                  onClick={async () => {
+                                    playStatusBeepSound();
+                                    setBeepSim(true);
+                                    setTimeout(() => setBeepSim(false), 800);
+                                    try {
+                                      const res = await apiFetch(
+                                        `/api/orders/${order.id}/complete`,
+                                        {
+                                          method: 'PUT',
+                                          headers: { 'Content-Type': 'application/json' },
+                                        },
+                                      );
+                                      if (res.ok) {
+                                        await onUpdateOrderStatus(order.id, 'completed');
+                                      }
+                                    } catch (err) {
+                                      console.warn('[KDS] Complete paid order failed:', err);
+                                      await onUpdateOrderStatus(order.id, 'completed');
+                                    }
+                                  }}
+                                  className="bg-[#00C300] hover:bg-emerald-500 text-[#0F0F0F] px-4 py-1.5 rounded-lg font-black text-xs flex items-center space-x-1.5 transition cursor-pointer animate-pulse ring-2 ring-emerald-400/60 shadow-lg shadow-emerald-500/20"
+                                >
+                                  <Check size={13} className="stroke-[3]" />
+                                  <span>出餐完成</span>
+                                </button>
+
+                                <span className="text-emerald-400 text-[10px] font-bold flex items-center space-x-0.5 bg-emerald-500/10 border border-emerald-500/30 px-2 py-1 rounded-lg">
+                                  <span>💳 已結帳</span>
+                                </span>
+                              </>
+                            )}
+
+                            {order.status === 'completed' && (
+                              <span className="text-[#00C300] text-xs font-bold flex items-center space-x-0.5">
+                                <Check size={14} />
+                                <span>已順利出餐 Done</span>
+                              </span>
+                            )}
+
+                            {order.status === 'cancelled' && (
+                              <span className="text-white/30 text-xs font-bold line-through">
+                                已廢棄 Cancel
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      </>
+                    )}
                   </div>
-                  </>
-                  )}
                 </div>
-              </div>
-            );
-          })}
+              );
+            })}
           </div>
         )}
 
@@ -2547,25 +3083,40 @@ ${specLines}
       {/* LAN Receipt Printer Simulator Terminal Sidebar */}
       <div className="space-y-4 font-sans">
         {/* 🛑 Kitchen Service Pause Toggle */}
-        <div className="bg-[#161616] border border-orange-500/20 rounded-xl p-5 space-y-4 font-sans text-left" id="kds-emergency-control">
+        <div
+          className="bg-[#161616] border border-orange-500/20 rounded-xl p-5 space-y-4 font-sans text-left"
+          id="kds-emergency-control"
+        >
           <div className="border-b border-orange-500/10 pb-2 flex items-center justify-between">
             <div>
-              <span className="text-[10px] font-bold text-orange-400 tracking-widest block uppercase font-sans">緊急狀態與客流量控制 Emergency Control</span>
-              <h4 className="font-bold text-sm mt-0.5 text-white font-serif">廚房「暫停接單」機制 Service Pause Toggle</h4>
+              <span className="text-[10px] font-bold text-orange-400 tracking-widest block uppercase font-sans">
+                緊急狀態與客流量控制 Emergency Control
+              </span>
+              <h4 className="font-bold text-sm mt-0.5 text-white font-serif">
+                廚房「暫停接單」機制 Service Pause Toggle
+              </h4>
             </div>
-            <div className={`p-1 px-2.5 rounded-full text-[10px] font-black uppercase tracking-wider ${servicePaused ? 'bg-rose-500/15 text-rose-400 border border-rose-500/20 animate-pulse' : 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/20'}`}>
+            <div
+              className={`p-1 px-2.5 rounded-full text-[10px] font-black uppercase tracking-wider ${servicePaused ? 'bg-rose-500/15 text-rose-400 border border-rose-500/20 animate-pulse' : 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/20'}`}
+            >
               {servicePaused ? '🔴 暫停服務中 (Paused)' : '🟢 正常接單中 (Normal)'}
             </div>
           </div>
-          
+
           <div className="space-y-3.5 text-xs font-sans">
             <p className="text-[11px] text-zinc-400 leading-normal">
               當店內排隊或現場單量過大、廚房人力飽和時，一鍵啟用暫停接單機制。啟用後：
             </p>
             <ul className="list-disc pl-4 text-[10.5px] text-zinc-400 space-y-1.5 leading-relaxed">
-              <li>顧客點餐首頁將<strong>即時彈出橙紅色警示橫幅</strong>，通知廚房正在全力消化訂單中。</li>
-              <li><strong>鎖定「送出訂單」功能</strong>，但顧客仍可自由流覽餐點與加點歷史。</li>
-              <li>系統會自動將狀態<strong>推播至前台通知欄</strong>。</li>
+              <li>
+                顧客點餐首頁將<strong>即時彈出橙紅色警示橫幅</strong>，通知廚房正在全力消化訂單中。
+              </li>
+              <li>
+                <strong>鎖定「送出訂單」功能</strong>，但顧客仍可自由流覽餐點與加點歷史。
+              </li>
+              <li>
+                系統會自動將狀態<strong>推播至前台通知欄</strong>。
+              </li>
             </ul>
 
             <div className="pt-2">
@@ -2573,24 +3124,33 @@ ${specLines}
                 type="button"
                 onClick={() => onToggleServicePause && onToggleServicePause(!servicePaused)}
                 className={`w-full py-2.5 rounded-lg font-extrabold text-[12px] shadow-md tracking-wider transition duration-200 active:scale-95 cursor-pointer flex items-center justify-center gap-1.5 ${
-                  servicePaused 
-                    ? 'bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white shadow-emerald-950/20' 
+                  servicePaused
+                    ? 'bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white shadow-emerald-950/20'
                     : 'bg-gradient-to-r from-rose-600 to-orange-600 hover:from-rose-500 hover:to-orange-500 text-white shadow-rose-950/20'
                 }`}
               >
-                <span>{servicePaused ? '⚡ 恢復正常營運接單 (Resume Service)' : '🛑 啟動廚房「暫停接單」 (Pause Service)'}</span>
+                <span>
+                  {servicePaused
+                    ? '⚡ 恢復正常營運接單 (Resume Service)'
+                    : '🛑 啟動廚房「暫停接單」 (Pause Service)'}
+                </span>
               </button>
             </div>
           </div>
         </div>
 
         {/* KDS Real-time Menu & Inventory Controller Card */}
-        <div className="bg-[#161616] border border-white/10 text-white rounded-xl p-5 shadow-lg space-y-4" id="kds-quick-controller-card">
+        <div
+          className="bg-[#161616] border border-white/10 text-white rounded-xl p-5 shadow-lg space-y-4"
+          id="kds-quick-controller-card"
+        >
           <div className="border-b border-white/10 pb-3 flex items-center justify-between">
             <div className="flex items-center space-x-2">
               <Settings className="text-[#E5B453] shrink-0 font-bold animate-spin-slow" size={18} />
               <div className="text-left font-sans">
-                <span className="text-[10px] text-[#E5B453] font-bold block uppercase tracking-widest">KDS Operations</span>
+                <span className="text-[10px] text-[#E5B453] font-bold block uppercase tracking-widest">
+                  KDS Operations
+                </span>
                 <span className="text-xs font-black text-white">即時營運及供應鏈控制</span>
               </div>
             </div>
@@ -2599,7 +3159,9 @@ ${specLines}
                 type="button"
                 onClick={() => setKdsActiveTab('menu')}
                 className={`px-2 py-1 rounded text-[10px] font-black transition cursor-pointer select-none active:scale-95 ${
-                  kdsActiveTab === 'menu' ? 'bg-[#E5B453] text-[#0F0F0F]' : 'text-zinc-500 hover:text-white'
+                  kdsActiveTab === 'menu'
+                    ? 'bg-[#E5B453] text-[#0F0F0F]'
+                    : 'text-zinc-500 hover:text-white'
                 }`}
               >
                 品項沽清
@@ -2608,7 +3170,9 @@ ${specLines}
                 type="button"
                 onClick={() => setKdsActiveTab('ingredients')}
                 className={`px-2 py-1 rounded text-[10px] font-black transition cursor-pointer select-none active:scale-95 ${
-                  kdsActiveTab === 'ingredients' ? 'bg-[#E5B453] text-[#0F0F0F]' : 'text-zinc-500 hover:text-white'
+                  kdsActiveTab === 'ingredients'
+                    ? 'bg-[#E5B453] text-[#0F0F0F]'
+                    : 'text-zinc-500 hover:text-white'
                 }`}
               >
                 即時庫存
@@ -2632,7 +3196,7 @@ ${specLines}
                   >
                     全部品項
                   </button>
-                  {categories.map(cat => (
+                  {categories.map((cat) => (
                     <button
                       key={cat.id}
                       type="button"
@@ -2643,7 +3207,7 @@ ${specLines}
                           : 'bg-transparent text-zinc-400 border-white/10 hover:text-white'
                       }`}
                     >
-                      {(getLocalizedText(cat.name, currentLang) || cat.id)}
+                      {getLocalizedText(cat.name, currentLang) || cat.id}
                     </button>
                   ))}
                 </div>
@@ -2671,8 +3235,17 @@ ${specLines}
               <div className="space-y-1.5 max-h-[300px] overflow-y-auto pr-1">
                 {menuItems
                   .filter((item) => {
-                    const matchesCategory = kdsSelectedCategory === 'all' || item.category === kdsSelectedCategory;
-                    const matchesSearch = !kdsMenuSearch || getLocalizedText(item.name, 'zh').toLowerCase().includes(kdsMenuSearch.toLowerCase()) || (getLocalizedText(item.name, 'en') && getLocalizedText(item.name, 'en').toLowerCase().includes(kdsMenuSearch.toLowerCase()));
+                    const matchesCategory =
+                      kdsSelectedCategory === 'all' || item.category === kdsSelectedCategory;
+                    const matchesSearch =
+                      !kdsMenuSearch ||
+                      getLocalizedText(item.name, 'zh')
+                        .toLowerCase()
+                        .includes(kdsMenuSearch.toLowerCase()) ||
+                      (getLocalizedText(item.name, 'en') &&
+                        getLocalizedText(item.name, 'en')
+                          .toLowerCase()
+                          .includes(kdsMenuSearch.toLowerCase()));
                     return matchesCategory && matchesSearch;
                   })
                   .map((item) => (
@@ -2681,15 +3254,19 @@ ${specLines}
                       className="p-2 rounded-lg bg-black/25 hover:bg-black/45 border border-white/5 flex items-center justify-between text-xs transition"
                     >
                       <div className="text-left flex-1 min-w-0 mr-2">
-                        <p className="font-bold text-white truncate text-[11px]">{getLocalizedText(item.name, 'zh')}</p>
+                        <p className="font-bold text-white truncate text-[11px]">
+                          {getLocalizedText(item.name, 'zh')}
+                        </p>
                         <p className="text-[9px] text-zinc-500 font-mono truncate">ID: {item.id}</p>
                       </div>
                       <div className="flex items-center space-x-1.5 shrink-0">
-                        <span className={`text-[10px] px-1.5 py-0.5 rounded font-black shrink-0 ${
-                          item.available
-                            ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
-                            : 'bg-rose-500/10 text-rose-400 border border-rose-500/20'
-                        }`}>
+                        <span
+                          className={`text-[10px] px-1.5 py-0.5 rounded font-black shrink-0 ${
+                            item.available
+                              ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
+                              : 'bg-rose-500/10 text-rose-400 border border-rose-500/20'
+                          }`}
+                        >
                           {item.available ? '販售' : '沽清'}
                         </span>
                         {onToggleMenuItemAvailability && (
@@ -2746,7 +3323,13 @@ ${specLines}
                             )}
                           </p>
                           <p className="text-[9px] text-zinc-500 font-mono">
-                            剩餘: <b className={`font-semibold ${isWarning ? 'text-rose-400' : 'text-zinc-300'}`}>{ig.stock}</b> {ig.unit} / 門檻: {ig.minThreshold}
+                            剩餘:{' '}
+                            <b
+                              className={`font-semibold ${isWarning ? 'text-rose-400' : 'text-zinc-300'}`}
+                            >
+                              {ig.stock}
+                            </b>{' '}
+                            {ig.unit} / 門檻: {ig.minThreshold}
                           </p>
                         </div>
                       </div>
@@ -2817,7 +3400,12 @@ ${specLines}
                           <input
                             type="text"
                             value={manualVal}
-                            onChange={(e) => setIngredientManualQty({ ...ingredientManualQty, [ig.id]: e.target.value })}
+                            onChange={(e) =>
+                              setIngredientManualQty({
+                                ...ingredientManualQty,
+                                [ig.id]: e.target.value,
+                              })
+                            }
                             placeholder="自訂"
                             className="bg-black/65 border border-white/10 text-white font-mono text-[10px] rounded px-1.5 py-1 w-full text-center focus:outline-none focus:border-[#E5B453]"
                           />
@@ -2829,7 +3417,11 @@ ${specLines}
                               if (isNaN(parsed)) return;
                               if (onAdjustIngredientStock) {
                                 setAdjustingIngredientId(ig.id);
-                                await onAdjustIngredientStock(ig.id, parsed, `KDS螢幕自訂異動盤庫 (${parsed > 0 ? '+' : ''}${parsed})`);
+                                await onAdjustIngredientStock(
+                                  ig.id,
+                                  parsed,
+                                  `KDS螢幕自訂異動盤庫 (${parsed > 0 ? '+' : ''}${parsed})`,
+                                );
                                 setIngredientManualQty({ ...ingredientManualQty, [ig.id]: '' });
                                 setAdjustingIngredientId(null);
                               }
@@ -2909,12 +3501,26 @@ ${specLines}
                           偵測中...
                         </span>
                       ) : pingState.reachable ? (
-                        <span className="inline-flex items-center gap-1 text-[9px] bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 px-1.5 py-0.5 rounded font-extrabold" title={pingState.lastChecked ? `連線狀態: 本機與實體印表機連線正常 (最後偵測: ${pingState.lastChecked})` : ''}>
+                        <span
+                          className="inline-flex items-center gap-1 text-[9px] bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 px-1.5 py-0.5 rounded font-extrabold"
+                          title={
+                            pingState.lastChecked
+                              ? `連線狀態: 本機與實體印表機連線正常 (最後偵測: ${pingState.lastChecked})`
+                              : ''
+                          }
+                        >
                           <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
                           在線 🟢
                         </span>
                       ) : (
-                        <span className="inline-flex items-center gap-1 text-[9px] bg-rose-500/10 text-rose-400 border border-rose-500/20 px-1.5 py-0.5 rounded font-extrabold" title={pingState.error ? `連線錯誤原因: ${pingState.error}` : '無法通訊，請檢查網路配置、實體印表機電源及區域網路插口'}>
+                        <span
+                          className="inline-flex items-center gap-1 text-[9px] bg-rose-500/10 text-rose-400 border border-rose-500/20 px-1.5 py-0.5 rounded font-extrabold"
+                          title={
+                            pingState.error
+                              ? `連線錯誤原因: ${pingState.error}`
+                              : '無法通訊，請檢查網路配置、實體印表機電源及區域網路插口'
+                          }
+                        >
                           <span className="w-1.5 h-1.5 rounded-full bg-rose-400" />
                           離線 🔴
                         </span>
@@ -2951,33 +3557,50 @@ ${specLines}
                 id="export-print-logs-csv-btn"
                 onClick={() => {
                   if (!printLogs || printLogs.length === 0) {
-                    alert('⚠️ 目前尚無任何虛擬出單記錄可供匯出！ There is no virtual print history to export.');
+                    alert(
+                      '⚠️ 目前尚無任何虛擬出單記錄可供匯出！ There is no virtual print history to export.',
+                    );
                     return;
                   }
-                  
+
                   // CSV Generation logic with headers or content lines
-                  const headers = ['Index', 'Type', 'Timestamp', 'Header/Table', 'Details Summary', 'Raw Ticket Text'];
-                  
+                  const headers = [
+                    'Index',
+                    'Type',
+                    'Timestamp',
+                    'Header/Table',
+                    'Details Summary',
+                    'Raw Ticket Text',
+                  ];
+
                   const rows = printLogs.map((log, index) => {
                     const rawContent = log.content || '';
                     const cleanContent = rawContent.replace(/"/g, '""');
                     const lines = rawContent.split('\n');
                     let tableMark = 'N/A';
                     let descriptionStr = '';
-                    
+
                     lines.forEach((line: string) => {
                       if (line.includes('桌號/標記') || line.includes('Table')) {
                         const parts = line.split(':');
                         tableMark = parts[1] ? parts[1].trim() : '';
                       }
                     });
-                    
+
                     // Summarize items for high level description
                     const itemsArr: string[] = [];
                     lines.forEach((line: string) => {
-                      if (line.includes('[ ]') || line.trim().startsWith('•') || line.includes('x')) {
+                      if (
+                        line.includes('[ ]') ||
+                        line.trim().startsWith('•') ||
+                        line.includes('x')
+                      ) {
                         const trimmedLine = line.replace(/\[\s*\]/g, '').trim();
-                        if (trimmedLine.length > 0 && !trimmedLine.includes('======') && !trimmedLine.includes('------')) {
+                        if (
+                          trimmedLine.length > 0 &&
+                          !trimmedLine.includes('======') &&
+                          !trimmedLine.includes('------')
+                        ) {
                           itemsArr.push(trimmedLine);
                         }
                       }
@@ -2990,21 +3613,25 @@ ${specLines}
                       log.timestamp || '',
                       tableMark,
                       descriptionStr ? `"${descriptionStr.replace(/"/g, '""')}"` : 'N/A',
-                      `"${cleanContent}"`
+                      `"${cleanContent}"`,
                     ];
                   });
 
-                  const csvContent = [
-                    headers.join(','),
-                    ...rows.map(row => row.join(','))
-                  ].join('\n');
+                  const csvContent = [headers.join(','), ...rows.map((row) => row.join(','))].join(
+                    '\n',
+                  );
 
                   // Force UTF-8 BOM so Excel opens Chinese text correctly
-                  const blob = new Blob([new Uint8Array([0xEF, 0xBB, 0xBF]), csvContent], { type: 'text/csv;charset=utf-8;' });
+                  const blob = new Blob([new Uint8Array([0xef, 0xbb, 0xbf]), csvContent], {
+                    type: 'text/csv;charset=utf-8;',
+                  });
                   const url = URL.createObjectURL(blob);
                   const link = document.createElement('a');
                   link.setAttribute('href', url);
-                  link.setAttribute('download', `Sabay_Thermal_Print_History_${new Date().toISOString().slice(0,10)}_${new Date().toTimeString().slice(0,5).replace(':', '')}.csv`);
+                  link.setAttribute(
+                    'download',
+                    `Sabay_Thermal_Print_History_${new Date().toISOString().slice(0, 10)}_${new Date().toTimeString().slice(0, 5).replace(':', '')}.csv`,
+                  );
                   document.body.appendChild(link);
                   link.click();
                   document.body.removeChild(link);
@@ -3031,9 +3658,14 @@ ${specLines}
           <div className="bg-black/25 rounded-lg border border-white/5 p-2.5 flex flex-col space-y-2 text-left">
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
               <span className="text-[10px] text-white/50 font-sans flex items-center space-x-1.5">
-                <Wifi size={10} className={pingState.reachable ? "text-emerald-400 animate-pulse" : "text-rose-400"} />
+                <Wifi
+                  size={10}
+                  className={
+                    pingState.reachable ? 'text-emerald-400 animate-pulse' : 'text-rose-400'
+                  }
+                />
                 <span className="font-mono">
-                  {pingState.reachable 
+                  {pingState.reachable
                     ? `端點 ${printerIp}:9100 在線`
                     : `端點 ${printerIp}:9100 離線`}
                 </span>
@@ -3056,7 +3688,7 @@ ${specLines}
                       } else {
                         setPrinterError(res.error || '列印失敗');
                       }
-                    }
+                    },
                   });
                 }}
                 className={`active:scale-95 border text-xs py-1 px-2.5 rounded transition flex items-center space-x-1 cursor-pointer disabled:opacity-45 font-bold ${
@@ -3075,7 +3707,9 @@ ${specLines}
             </div>
 
             {printerSuccess && (
-              <p className="text-[9.5px] text-emerald-400 font-sans font-bold">✓ {printerSuccess}</p>
+              <p className="text-[9.5px] text-emerald-400 font-sans font-bold">
+                ✓ {printerSuccess}
+              </p>
             )}
             {printerError && (
               <p className="text-[9.5px] text-rose-400 font-sans font-bold">⚠️ {printerError}</p>
@@ -3121,16 +3755,23 @@ ${specLines}
       {/* ──────────────────────────────────────────────────────── */}
       {/* KDS Quick View Modal */}
       {quickViewOrder && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-sm" id="kds-quick-view-modal">
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-sm"
+          id="kds-quick-view-modal"
+        >
           <div className="w-full max-w-2xl bg-[#121212] border-2 border-white/10 rounded-2xl overflow-hidden shadow-2xl flex flex-col max-h-[90vh] text-left">
             {/* Modal Header */}
-            <div className={`p-5 border-b border-white/10 flex items-center justify-between ${quickViewOrder.isFlagged ? 'bg-red-950/40' : 'bg-black/40'}`}>
+            <div
+              className={`p-5 border-b border-white/10 flex items-center justify-between ${quickViewOrder.isFlagged ? 'bg-red-950/40' : 'bg-black/40'}`}
+            >
               <div className="flex items-center gap-2.5">
                 <span className="bg-[#E5B453] text-black font-mono font-black text-sm px-3 py-1 rounded-md">
                   #{quickViewOrder.id}
                 </span>
                 <h3 className="text-lg font-bold text-white font-sans">
-                  {quickViewOrder.tableNumber} {quickViewOrder.tableNumber.includes('外帶') ? '' : '桌'} 餐點明細 (KDS Quick View)
+                  {quickViewOrder.tableNumber}{' '}
+                  {quickViewOrder.tableNumber.includes('外帶') ? '' : '桌'} 餐點明細 (KDS Quick
+                  View)
                 </h3>
                 {quickViewOrder.isFlagged && (
                   <span className="bg-red-500 text-white text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded animate-pulse select-none flex items-center gap-1">
@@ -3154,14 +3795,25 @@ ${specLines}
               <div className="grid grid-cols-2 gap-4 bg-white/5 p-4 rounded-xl border border-white/5 text-xs font-mono">
                 <div>
                   <p className="text-white/40">下單時間 Order Time</p>
-                  <p className="text-white font-bold text-sm mt-0.5">{new Date(quickViewOrder.createdAt).toLocaleTimeString()}</p>
+                  <p className="text-white font-bold text-sm mt-0.5">
+                    {new Date(quickViewOrder.createdAt).toLocaleTimeString()}
+                  </p>
                 </div>
                 <div>
                   <p className="text-white/40 font-bold">等候時間 Elapsed Time</p>
-                  <p className={`font-black text-sm mt-0.5 inline-flex items-center gap-1 ${
-                    Math.floor((Date.now() - new Date(quickViewOrder.createdAt).getTime()) / 60000) > 30 ? 'text-red-500 font-extrabold animate-pulse' : 
-                    Math.floor((Date.now() - new Date(quickViewOrder.createdAt).getTime()) / 60000) > 15 ? 'text-yellow-400 font-bold animate-pulse' : 'text-white'
-                  }`}>
+                  <p
+                    className={`font-black text-sm mt-0.5 inline-flex items-center gap-1 ${
+                      Math.floor(
+                        (Date.now() - new Date(quickViewOrder.createdAt).getTime()) / 60000,
+                      ) > 30
+                        ? 'text-red-500 font-extrabold animate-pulse'
+                        : Math.floor(
+                              (Date.now() - new Date(quickViewOrder.createdAt).getTime()) / 60000,
+                            ) > 15
+                          ? 'text-yellow-400 font-bold animate-pulse'
+                          : 'text-white'
+                    }`}
+                  >
                     <Clock size={12} />
                     {getElapsedTime(quickViewOrder.createdAt).text}
                   </p>
@@ -3181,20 +3833,34 @@ ${specLines}
                   <div className="col-span-2 bg-sky-500/5 border border-sky-500/15 p-3 rounded-lg text-left text-xs font-mono">
                     <p className="text-sky-400 font-bold text-[10px] uppercase tracking-wider flex items-center gap-1.5">
                       <Timer size={12} className="text-sky-450" />
-                      {quickViewOrder.tableNumber.includes('外帶') ? '顧客滯留總時間 Guest Wait Session' : '桌況佔用總時間 Table Occupancy'}
+                      {quickViewOrder.tableNumber.includes('外帶')
+                        ? '顧客滯留總時間 Guest Wait Session'
+                        : '桌況佔用總時間 Table Occupancy'}
                     </p>
                     <p className="text-white font-bold text-xs mt-1 flex flex-wrap items-center gap-1.5 leading-relaxed">
-                      <span className={`px-2 py-0.5 rounded border text-[11px] font-black font-mono ${qvOcc.style}`}>{qvOcc.text}</span>
+                      <span
+                        className={`px-2 py-0.5 rounded border text-[11px] font-black font-mono ${qvOcc.style}`}
+                      >
+                        {qvOcc.text}
+                      </span>
                       <span className="text-zinc-400 font-sans">
-                        (自首筆點單於 {new Date(orders.find(o => o.id === qvOcc.oldestOrderId)?.createdAt || '').toLocaleTimeString()} 送出起算，該桌目前共 {qvOcc.orderCount} 筆未完成點單)
+                        (自首筆點單於{' '}
+                        {new Date(
+                          orders.find((o) => o.id === qvOcc.oldestOrderId)?.createdAt || '',
+                        ).toLocaleTimeString()}{' '}
+                        送出起算，該桌目前共 {qvOcc.orderCount} 筆未完成點單)
                       </span>
                     </p>
                   </div>
                 )}
                 {quickViewOrder.quickNotes && (
                   <div className="col-span-2 bg-[#E5B453]/5 border border-[#E5B453]/25 p-3 rounded-lg text-left">
-                    <p className="text-[#E5B453] font-bold text-[10px] uppercase tracking-wider">KDS 快速備註 Quick Note</p>
-                    <p className="text-white font-black text-sm mt-1">📝 {quickViewOrder.quickNotes}</p>
+                    <p className="text-[#E5B453] font-bold text-[10px] uppercase tracking-wider">
+                      KDS 快速備註 Quick Note
+                    </p>
+                    <p className="text-white font-black text-sm mt-1">
+                      📝 {quickViewOrder.quickNotes}
+                    </p>
                   </div>
                 )}
                 {quickViewOrder.isFlagged && quickViewOrder.flagReason && (
@@ -3203,7 +3869,9 @@ ${specLines}
                       <AlertTriangle size={12} />
                       特別關注 Attention Required
                     </p>
-                    <p className="text-white font-bold text-sm mt-1">⚠️ {quickViewOrder.flagReason}</p>
+                    <p className="text-white font-bold text-sm mt-1">
+                      ⚠️ {quickViewOrder.flagReason}
+                    </p>
                   </div>
                 )}
               </div>
@@ -3213,27 +3881,46 @@ ${specLines}
                 <h4 className="text-xs text-white/50 font-bold uppercase tracking-wider">
                   餐點清單 Item Breakdown ({quickViewOrder.items.length})
                 </h4>
-                
+
                 <div className="space-y-3">
                   {quickViewOrder.items.map((it, idx) => {
-                    const sweetnessText = it.customization.sweetness === 0 ? t('sugarFree') : (it.customization.sweetness === 1 ? t('sweet30') : (it.customization.sweetness === 2 ? t('sweet50') : t('sweet100')));
-                    const spicinessText = it.customization.spiciness === 0 ? t('notSpicy') : (it.customization.spiciness === 1 ? t('mildSpicy') : (it.customization.spiciness === 2 ? t('mediumSpicy') : t('thaiSpicy')));
-                    
+                    const sweetnessText =
+                      it.customization.sweetness === 0
+                        ? t('sugarFree')
+                        : it.customization.sweetness === 1
+                          ? t('sweet30')
+                          : it.customization.sweetness === 2
+                            ? t('sweet50')
+                            : t('sweet100');
+                    const spicinessText =
+                      it.customization.spiciness === 0
+                        ? t('notSpicy')
+                        : it.customization.spiciness === 1
+                          ? t('mildSpicy')
+                          : it.customization.spiciness === 2
+                            ? t('mediumSpicy')
+                            : t('thaiSpicy');
+
                     return (
-                      <div key={idx} className={`border rounded-xl p-4 space-y-3 transition ${
-                        it.isCompleted 
-                          ? 'bg-emerald-950/10 border-emerald-500/20 hover:border-emerald-500/30' 
-                          : 'bg-black/30 border-white/5 hover:border-white/10'
-                      }`}>
+                      <div
+                        key={idx}
+                        className={`border rounded-xl p-4 space-y-3 transition ${
+                          it.isCompleted
+                            ? 'bg-emerald-950/10 border-emerald-500/20 hover:border-emerald-500/30'
+                            : 'bg-black/30 border-white/5 hover:border-white/10'
+                        }`}
+                      >
                         {/* Title and qty */}
                         <div className="flex items-center justify-between gap-3 flex-wrap">
                           <div className={it.isCompleted ? 'opacity-40 line-through' : ''}>
                             <span className="font-extrabold text-lg text-white block">
                               {getLocalizedText(it.name, currentLang)}
                             </span>
-                            <span className="text-xs text-zinc-400 font-medium block mt-0.5 font-mono">{getLocalizedText(it.name, currentLang === 'zh' ? 'en' : 'zh')}</span>
+                            <span className="text-xs text-zinc-400 font-medium block mt-0.5 font-mono">
+                              {getLocalizedText(it.name, currentLang === 'zh' ? 'en' : 'zh')}
+                            </span>
                           </div>
-                          
+
                           <div className="flex items-center gap-2">
                             <span className="bg-[#E5B453] text-[#0F0F0F] rounded-lg px-4 py-1.5 text-lg font-black font-mono">
                               x {it.qty} {t('qtyPortion')}
@@ -3261,7 +3948,12 @@ ${specLines}
                                   type="button"
                                   onClick={() => {
                                     if (true) {
-                                      handleItemStatusToggle(quickViewOrder.id, it.id, false, false);
+                                      handleItemStatusToggle(
+                                        quickViewOrder.id,
+                                        it.id,
+                                        false,
+                                        false,
+                                      );
                                     }
                                   }}
                                   className="h-10 px-2 rounded-xl text-[11px] font-bold transition-all duration-200 flex items-center justify-center gap-1 border cursor-pointer bg-amber-500/20 text-amber-300 border-amber-500/40 hover:bg-amber-500/30"
@@ -3307,33 +3999,47 @@ ${specLines}
                         {/* Customization Details Grid with High Contrast blocks */}
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-2">
                           {/* Sweetness Block */}
-                          <div className={`p-2.5 rounded-lg border text-xs ${
-                            it.customization.sweetness === 0
-                              ? 'bg-zinc-900 border-zinc-800 text-zinc-400'
-                              : 'bg-white/5 border-white/10 text-white'
-                          }`}>
-                            <span className="text-[10px] text-zinc-500 font-bold block uppercase mb-1">{t('sweetness')} Sweetness</span>
+                          <div
+                            className={`p-2.5 rounded-lg border text-xs ${
+                              it.customization.sweetness === 0
+                                ? 'bg-zinc-900 border-zinc-800 text-zinc-400'
+                                : 'bg-white/5 border-white/10 text-white'
+                            }`}
+                          >
+                            <span className="text-[10px] text-zinc-500 font-bold block uppercase mb-1">
+                              {t('sweetness')} Sweetness
+                            </span>
                             <span className="font-extrabold text-xs">{sweetnessText}</span>
                           </div>
 
                           {/* Spiciness Block - highlight red for high spiciness */}
-                          <div className={`p-2.5 rounded-lg border text-xs ${
-                            it.customization.spiciness === 0
-                              ? 'bg-zinc-900 border-zinc-800 text-zinc-400'
-                              : it.customization.spiciness >= 2
-                                ? 'bg-red-500/10 border-red-500/30 text-red-400 font-black'
-                                : 'bg-amber-500/10 border-amber-500/25 text-amber-400 font-bold'
-                          }`}>
-                            <span className="text-[10px] text-zinc-500 font-bold block uppercase mb-1">{t('spiciness')} Spiciness</span>
+                          <div
+                            className={`p-2.5 rounded-lg border text-xs ${
+                              it.customization.spiciness === 0
+                                ? 'bg-zinc-900 border-zinc-800 text-zinc-400'
+                                : it.customization.spiciness >= 2
+                                  ? 'bg-red-500/10 border-red-500/30 text-red-400 font-black'
+                                  : 'bg-amber-500/10 border-amber-500/25 text-amber-400 font-bold'
+                            }`}
+                          >
+                            <span className="text-[10px] text-zinc-500 font-bold block uppercase mb-1">
+                              {t('spiciness')} Spiciness
+                            </span>
                             <span className="text-xs">{spicinessText}</span>
                           </div>
 
                           {/* Noodle Type */}
                           {it.customization.noodleType && (
                             <div className="p-2.5 bg-white/5 border border-white/10 rounded-lg text-xs text-white">
-                              <span className="text-[10px] text-zinc-500 font-bold block uppercase mb-1">{t('noodleOption')} Noodle Type</span>
+                              <span className="text-[10px] text-zinc-500 font-bold block uppercase mb-1">
+                                {t('noodleOption')} Noodle Type
+                              </span>
                               <span className="font-extrabold">
-                                {it.customization.noodleType === 'rice-noodle' ? `🍜 ${t('riceNoodle')} (Rice Noodle)` : (it.customization.noodleType === 'vermicelli' ? `🍜 ${t('vermicelli')} (Vermicelli)` : t('noNoodle'))}
+                                {it.customization.noodleType === 'rice-noodle'
+                                  ? `🍜 ${t('riceNoodle')} (Rice Noodle)`
+                                  : it.customization.noodleType === 'vermicelli'
+                                    ? `🍜 ${t('vermicelli')} (Vermicelli)`
+                                    : t('noNoodle')}
                               </span>
                             </div>
                           )}
@@ -3341,26 +4047,37 @@ ${specLines}
                           {/* Soup Base */}
                           {it.customization.soupBase && (
                             <div className="p-2.5 bg-white/5 border border-white/10 rounded-lg text-xs text-white">
-                              <span className="text-[10px] text-zinc-500 font-bold block uppercase mb-1">{t('soupBaseLabel')} Soup Base</span>
+                              <span className="text-[10px] text-zinc-500 font-bold block uppercase mb-1">
+                                {t('soupBaseLabel')} Soup Base
+                              </span>
                               <span className="font-extrabold">
-                                {it.customization.soupBase === 'coconut-milk' ? `🥥 ${t('coconutMilkAdd')}` : '冬蔭功 Tom Yum'}
+                                {it.customization.soupBase === 'coconut-milk'
+                                  ? `🥥 ${t('coconutMilkAdd')}`
+                                  : '冬蔭功 Tom Yum'}
                               </span>
                             </div>
                           )}
 
                           {/* Add-ons List */}
-                          {it.customization.selectedAddOns && it.customization.selectedAddOns.length > 0 && (
-                            <div className="col-span-1 sm:col-span-2 p-2.5 bg-amber-500/5 border border-amber-500/15 rounded-lg text-xs text-amber-300">
-                              <span className="text-[10px] text-amber-500/70 font-bold block uppercase mb-1">{t('addOnsLabel')} Add-ons</span>
-                              <div className="flex flex-wrap gap-1.5">
-                                {it.customization.selectedAddOns.map((addOn) => (
-                                  <span key={addOn.id} className="bg-amber-500/15 text-amber-250 border border-amber-500/30 font-bold px-2 py-0.5 rounded text-xs">
-                                    ＋ {getLocalizedText(addOn.name, currentLang)} x{addOn.qty || 1}
-                                  </span>
-                                ))}
+                          {it.customization.selectedAddOns &&
+                            it.customization.selectedAddOns.length > 0 && (
+                              <div className="col-span-1 sm:col-span-2 p-2.5 bg-amber-500/5 border border-amber-500/15 rounded-lg text-xs text-amber-300">
+                                <span className="text-[10px] text-amber-500/70 font-bold block uppercase mb-1">
+                                  {t('addOnsLabel')} Add-ons
+                                </span>
+                                <div className="flex flex-wrap gap-1.5">
+                                  {it.customization.selectedAddOns.map((addOn) => (
+                                    <span
+                                      key={addOn.id}
+                                      className="bg-amber-500/15 text-amber-250 border border-amber-500/30 font-bold px-2 py-0.5 rounded text-xs"
+                                    >
+                                      ＋ {getLocalizedText(addOn.name, currentLang)} x
+                                      {addOn.qty || 1}
+                                    </span>
+                                  ))}
+                                </div>
                               </div>
-                            </div>
-                          )}
+                            )}
 
                           {/* Direct Item Notes */}
                           {it.customization.notes && (
@@ -3388,17 +4105,39 @@ ${specLines}
                 <button
                   type="button"
                   onClick={() => {
-                    const specLines = quickViewOrder.items.map(it => {
-                      const spec = [
-                        it.customization.spiciness === 0 ? t('notSpicy') : (it.customization.spiciness === 1 ? t('mildSpicy') : (it.customization.spiciness === 2 ? t('mediumSpicy') : t('thaiSpicy'))),
-                        it.customization.sweetness === 0 ? t('sugarFree') : (it.customization.sweetness === 1 ? t('sweet30') : (it.customization.sweetness === 2 ? t('sweet50') : t('sweet100'))),
-                        it.customization.noodleType === 'rice-noodle' ? t('riceNoodle') : (it.customization.noodleType === 'vermicelli' ? t('vermicelli') : ''),
-                        it.customization.soupBase === 'coconut-milk' ? t('coconutMilkAdd') : '',
-                        it.customization.notes ? `${t('notesLabel')}: ${it.customization.notes}` : ''
-                      ].filter(Boolean).join('/');
-                      const itName = getLocalizedText(it.name, currentLang);
-                      return `[ ] ${itName} x ${it.qty} ${t('qtyPortion')}\n    【 ${spec} 】`;
-                    }).join('\n');
+                    const specLines = quickViewOrder.items
+                      .map((it) => {
+                        const spec = [
+                          it.customization.spiciness === 0
+                            ? t('notSpicy')
+                            : it.customization.spiciness === 1
+                              ? t('mildSpicy')
+                              : it.customization.spiciness === 2
+                                ? t('mediumSpicy')
+                                : t('thaiSpicy'),
+                          it.customization.sweetness === 0
+                            ? t('sugarFree')
+                            : it.customization.sweetness === 1
+                              ? t('sweet30')
+                              : it.customization.sweetness === 2
+                                ? t('sweet50')
+                                : t('sweet100'),
+                          it.customization.noodleType === 'rice-noodle'
+                            ? t('riceNoodle')
+                            : it.customization.noodleType === 'vermicelli'
+                              ? t('vermicelli')
+                              : '',
+                          it.customization.soupBase === 'coconut-milk' ? t('coconutMilkAdd') : '',
+                          it.customization.notes
+                            ? `${t('notesLabel')}: ${it.customization.notes}`
+                            : '',
+                        ]
+                          .filter(Boolean)
+                          .join('/');
+                        const itName = getLocalizedText(it.name, currentLang);
+                        return `[ ] ${itName} x ${it.qty} ${t('qtyPortion')}\n    【 ${spec} 】`;
+                      })
+                      .join('\n');
                     const ticketStr = `
 ========================================
        沙貝燒烤 (廚房工作即時交代單)
@@ -3422,7 +4161,7 @@ ${specLines}
                       receiptBody: ticketStr,
                       onConfirm: () => {
                         alert(`🖨️ 虛擬網卡列印指令傳送正常！(單號: ${quickViewOrder.id})`);
-                      }
+                      },
                     });
                   }}
                   className="bg-amber-500/10 hover:bg-amber-500/20 text-amber-300 border border-[#E5B453]/30 px-3.5 py-2 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 cursor-pointer active:scale-95 transition"
@@ -3445,12 +4184,23 @@ ${specLines}
 
       {/* 🖨️ 列印確認視窗 Printer Selection / Confirmation Dialog */}
       {printConfirmData && (
-        <div className="fixed inset-0 bg-black/85 backdrop-blur-xs z-50 flex items-center justify-center p-4 text-xs font-sans animate-fadeIn" id="print-confirmation-dialog-kds" onClick={() => setPrintConfirmData(null)}>
-          <div className={`bg-[#121212] border border-white/10 rounded-2xl w-full ${printConfirmData.receiptBody ? 'max-w-2xl' : 'max-w-sm'} overflow-hidden shadow-2xl text-left transition-all duration-300`} onClick={(e) => e.stopPropagation()}>
+        <div
+          className="fixed inset-0 bg-black/85 backdrop-blur-xs z-50 flex items-center justify-center p-4 text-xs font-sans animate-fadeIn"
+          id="print-confirmation-dialog-kds"
+          onClick={() => setPrintConfirmData(null)}
+        >
+          <div
+            className={`bg-[#121212] border border-white/10 rounded-2xl w-full ${printConfirmData.receiptBody ? 'max-w-2xl' : 'max-w-sm'} overflow-hidden shadow-2xl text-left transition-all duration-300`}
+            onClick={(e) => e.stopPropagation()}
+          >
             <div className="p-5 pb-3 border-b border-white/5 flex items-center justify-between">
               <h3 className="font-bold text-sm text-amber-400 flex items-center gap-1.5">
                 <Printer size={14} className="text-amber-400" />
-                <span>{printConfirmData.receiptBody ? '🖨️ 熱感出單預覽 Print Preview' : '確認執行列印任務？'}</span>
+                <span>
+                  {printConfirmData.receiptBody
+                    ? '🖨️ 熱感出單預覽 Print Preview'
+                    : '確認執行列印任務？'}
+                </span>
               </h3>
               <button
                 type="button"
@@ -3460,8 +4210,10 @@ ${specLines}
                 ✕
               </button>
             </div>
-            
-            <div className={`p-5 ${printConfirmData.receiptBody ? 'grid grid-cols-1 md:grid-cols-2 gap-5' : 'space-y-4'}`}>
+
+            <div
+              className={`p-5 ${printConfirmData.receiptBody ? 'grid grid-cols-1 md:grid-cols-2 gap-5' : 'space-y-4'}`}
+            >
               <div className="space-y-4">
                 <div className="bg-black/30 p-3 rounded-xl border border-white/5 space-y-2">
                   <div className="flex justify-between text-zinc-500 text-[10px]">
@@ -3470,24 +4222,35 @@ ${specLines}
                   </div>
                   <div className="flex justify-between text-zinc-500 text-[10px]">
                     <span>印表機 IP Address</span>
-                    <span className="text-amber-400 font-mono font-bold tracking-wider">{printConfirmData.ip}</span>
+                    <span className="text-amber-400 font-mono font-bold tracking-wider">
+                      {printConfirmData.ip}
+                    </span>
                   </div>
                 </div>
                 <p className="text-white/60 text-[11px] leading-relaxed">
                   請確認您已與本機熱熱感印硬體連線至同一區域網路內（WiFi），並確認印表機開機且狀態正常。
                 </p>
-                
+
                 {/* Visual Status simulator */}
                 <div className="bg-amber-500/5 border border-amber-500/10 p-3 rounded-xl text-[10px] space-y-1.5 font-mono text-amber-400/80">
-                  <span className="text-[9px] font-black tracking-widest text-[#E5B453] uppercase block">🟢 virtual queue live</span>
-                  <p>✔ 出單格式: {printConfirmData.receiptType === 'kitchen' ? '餐廳工作交代票 (Kitchen Ticket)' : '前台客戶收據 (Billing Receipt)'}</p>
+                  <span className="text-[9px] font-black tracking-widest text-[#E5B453] uppercase block">
+                    🟢 virtual queue live
+                  </span>
+                  <p>
+                    ✔ 出單格式:{' '}
+                    {printConfirmData.receiptType === 'kitchen'
+                      ? '餐廳工作交代票 (Kitchen Ticket)'
+                      : '前台客戶收據 (Billing Receipt)'}
+                  </p>
                   <p>✔ 支援本機熱感寬度 80mm / 58mm</p>
                 </div>
               </div>
 
               {printConfirmData.receiptBody && (
                 <div className="space-y-2">
-                  <span className="text-[10px] font-bold text-zinc-400 tracking-wider block uppercase">📄 虛擬熱感列印預覽 Thermal Receipt Preview:</span>
+                  <span className="text-[10px] font-bold text-zinc-400 tracking-wider block uppercase">
+                    📄 虛擬熱感列印預覽 Thermal Receipt Preview:
+                  </span>
                   <div className="relative bg-[#FAF9F5] text-zinc-900 p-5 font-mono border-t-[8px] border-b-[8px] border-dashed border-zinc-300 shadow-inner rounded max-h-[280px] overflow-y-auto text-[9.5px] leading-normal select-text scrollbar-thin">
                     <div className="absolute top-0 inset-x-0 h-0.5 bg-zinc-200"></div>
                     <pre className="whitespace-pre-wrap font-mono uppercase text-zinc-800 tracking-tight font-medium">

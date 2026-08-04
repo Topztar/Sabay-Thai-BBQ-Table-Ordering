@@ -9,16 +9,44 @@
         "orderId": { "type": "string", "description": "The customer order ID" },
         "tableNumber": { "type": "string", "description": "Assigned table number" },
         "subtotal": { "type": "number", "description": "Items base subtotal in TWD" },
-        "discount": { "type": "number", "description": "Discount applied under cashier adjustments" },
-        "serviceCharge": { "type": "number", "description": "Markup service surcharge if applicable" },
+        "discount": {
+          "type": "number",
+          "description": "Discount applied under cashier adjustments"
+        },
+        "serviceCharge": {
+          "type": "number",
+          "description": "Markup service surcharge if applicable"
+        },
         "total": { "type": "number", "description": "Sum final amount settled" },
-        "amountPaid": { "type": "number", "description": "Physical cash or electronic amount tendered" },
+        "amountPaid": {
+          "type": "number",
+          "description": "Physical cash or electronic amount tendered"
+        },
         "changeProvided": { "type": "number", "description": "Change refunded of cash payments" },
-        "paymentMethod": { "type": "string", "description": "Completed method: cash, credit, twqr" },
-        "staffPin": { "type": "string", "description": "Authorized staff verification 4-digit code" },
-        "checkoutTime": { "type": "string", "format": "date-time", "description": "ISO timestamp checkout complete duration" }
+        "paymentMethod": {
+          "type": "string",
+          "description": "Completed method: cash, credit, twqr"
+        },
+        "staffPin": {
+          "type": "string",
+          "description": "Authorized staff verification 4-digit code"
+        },
+        "checkoutTime": {
+          "type": "string",
+          "format": "date-time",
+          "description": "ISO timestamp checkout complete duration"
+        }
       },
-      "required": ["id", "orderId", "tableNumber", "subtotal", "total", "amountPaid", "paymentMethod", "checkoutTime"]
+      "required": [
+        "id",
+        "orderId",
+        "tableNumber",
+        "subtotal",
+        "total",
+        "amountPaid",
+        "paymentMethod",
+        "checkoutTime"
+      ]
     },
     "categories": {
       "title": "Category",
@@ -86,7 +114,16 @@
         "status": { "type": "string" },
         "createdAt": { "type": "string" }
       },
-      "required": ["id", "customerName", "phone", "guestCount", "tableNumber", "date", "time", "status"]
+      "required": [
+        "id",
+        "customerName",
+        "phone",
+        "guestCount",
+        "tableNumber",
+        "date",
+        "time",
+        "status"
+      ]
     },
     "orders": {
       "title": "Order",
@@ -104,7 +141,16 @@
         "paymentMethod": { "type": "string" },
         "isMember": { "type": "boolean" }
       },
-      "required": ["id", "tableNumber", "subtotal", "total", "status", "createdAt", "customerName", "paymentMethod"]
+      "required": [
+        "id",
+        "tableNumber",
+        "subtotal",
+        "total",
+        "status",
+        "createdAt",
+        "customerName",
+        "paymentMethod"
+      ]
     },
     "settings_records": {
       "title": "SettingsRecord",

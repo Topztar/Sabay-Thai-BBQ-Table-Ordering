@@ -10,28 +10,35 @@
     <title>沙貝燒烤 | 泰式QR線上點餐系統 Sabay BBQ Online Ordering</title>
     <script>
       // Global error listener to automatically reload with cache-busting if a script/chunk fails to load
-      window.addEventListener('error', function(e) {
-        if (e.target && (e.target.tagName === 'SCRIPT' || e.target.tagName === 'LINK')) {
-          console.warn('Resource load failed:', e.target.src || e.target.href);
-          const url = new URL(window.location.href);
-          if (!url.searchParams.has('_cb')) {
-            url.searchParams.set('_cb', Date.now().toString());
-            window.location.replace(url.toString());
+      window.addEventListener(
+        'error',
+        function (e) {
+          if (e.target && (e.target.tagName === 'SCRIPT' || e.target.tagName === 'LINK')) {
+            console.warn('Resource load failed:', e.target.src || e.target.href);
+            const url = new URL(window.location.href);
+            if (!url.searchParams.has('_cb')) {
+              url.searchParams.set('_cb', Date.now().toString());
+              window.location.replace(url.toString());
+            }
           }
-        }
-      }, true);
+        },
+        true,
+      );
     </script>
   </head>
   <body>
     <div id="root"></div>
-    <script type="module" src="/src/main.tsx" onerror="
-      console.warn('Main script loading failed. Attempting force reload with cache busting...');
-      const url = new URL(window.location.href);
-      if (!url.searchParams.has('_cb')) {
-        url.searchParams.set('_cb', Date.now().toString());
-        window.location.replace(url.toString());
-      }
-    "></script>
+    <script
+      type="module"
+      src="/src/main.tsx"
+      onerror="
+        console.warn('Main script loading failed. Attempting force reload with cache busting...');
+        const url = new URL(window.location.href);
+        if (!url.searchParams.has('_cb')) {
+          url.searchParams.set('_cb', Date.now().toString());
+          window.location.replace(url.toString());
+        }
+      "
+    ></script>
   </body>
 </html>
-

@@ -69,7 +69,7 @@ export interface Order {
   isMember: boolean;
   isPaid?: boolean;
   guestCount?: number;
-  refundLogs?: any[];
+  refundLogs?: unknown[];
   discount?: number;
   quickNotes?: string;
   isFlagged?: boolean;
@@ -102,7 +102,6 @@ export interface IngredientCost {
   amount: number;
 }
 
-
 export interface Category {
   id: string;
   name: { [key in Language]?: string };
@@ -131,7 +130,8 @@ export interface Reservation {
   tableNumber: string;
   date: string;
   time: string;
-  status: 'pending' | 'confirmed' | 'seated' | 'cancelled' | 'completed' | 'checked_out' | 'upcoming';
+  status:
+    'pending' | 'confirmed' | 'seated' | 'cancelled' | 'completed' | 'checked_out' | 'upcoming';
   notes?: string;
   createdAt: string;
   reservationNo?: string;
@@ -141,7 +141,7 @@ export interface OperatingHourSlot {
   id: string;
   name: string;
   start: string; // "HH:MM"
-  end: string;   // "HH:MM"
+  end: string; // "HH:MM"
   days: number[]; // days of week, 0-6 (0 is Sunday, 6 is Saturday)
   isActive: boolean;
   isReservableOnly?: boolean; // 可預約時段 (營業時間外只開放給已預約顧客)
@@ -158,4 +158,38 @@ export interface OrderHistoryBillStatus {
   tableNumber?: string;
 }
 
+export interface AnalyticsDataResponse {
+  totalRevenue: number;
+  ordersCount: number;
+  categorySales: { category: string; revenue: number }[];
+  hourlyDistribution: { timeSlot: string; orders: number }[];
+  topDishes: { name: string; qty: number }[];
+  stockWarnings: Ingredient[];
+}
 
+export interface PrinterConfigResponse {
+  ip?: string;
+  name?: string;
+}
+
+export interface PromoComboResponse {
+  enabled: boolean;
+  requiredQty: number;
+  discountAmount: number;
+  eligibleItemIds: string[];
+}
+
+export interface OperatingHoursResponse {
+  slots?: OperatingHourSlot[];
+  restDays?: string[];
+  isOpen?: boolean;
+}
+
+export interface MembersConfigResponse {
+  pointsRatio?: number;
+  rewards?: { id: string; name: string; points: number }[];
+}
+
+export interface CustomerNoticeResponse {
+  notice?: string;
+}

@@ -1,12 +1,22 @@
 import { initializeApp } from 'firebase/app';
-import { getFunctions } from "firebase/functions";
+import { getFunctions } from 'firebase/functions';
 import { getAuth } from 'firebase/auth';
-import { initializeFirestore, persistentLocalCache, persistentMultipleTabManager, getFirestore, Firestore, disableNetwork, enableNetwork } from 'firebase/firestore';
+import {
+  initializeFirestore,
+  persistentLocalCache,
+  persistentMultipleTabManager,
+  getFirestore,
+  Firestore,
+  disableNetwork,
+  enableNetwork,
+} from 'firebase/firestore';
 import firebaseConfig from '../../firebase-applet-config.json';
 
 const app = initializeApp(firebaseConfig);
 
-export const FIRESTORE_DATABASE_ID = firebaseConfig.firestoreDatabaseId || 'ai-studio-sabaythaibbqtabl-84418196-9d0c-459c-bced-ddc424dfba07';
+export const FIRESTORE_DATABASE_ID =
+  firebaseConfig.firestoreDatabaseId ||
+  'ai-studio-sabaythaibbqtabl-84418196-9d0c-459c-bced-ddc424dfba07';
 
 let firestoreInstance: Firestore;
 
@@ -22,11 +32,15 @@ const checkIndexedDB = (): boolean => {
 try {
   if (checkIndexedDB()) {
     // Configure persistent local cache with multi-tab manager for sub-millisecond cache speed and optimal quota conservation
-    firestoreInstance = initializeFirestore(app, {
-      localCache: persistentLocalCache({
-        tabManager: persistentMultipleTabManager()
-      })
-    }, FIRESTORE_DATABASE_ID);
+    firestoreInstance = initializeFirestore(
+      app,
+      {
+        localCache: persistentLocalCache({
+          tabManager: persistentMultipleTabManager(),
+        }),
+      },
+      FIRESTORE_DATABASE_ID,
+    );
   } else {
     firestoreInstance = getFirestore(app, FIRESTORE_DATABASE_ID);
   }
@@ -72,4 +86,3 @@ export const startFirebaseSync = async () => {
 stopFirebaseSync();
 
 export const functions = getFunctions(app);
-

@@ -18,7 +18,9 @@ class SafeStorage implements Storage {
       storage.removeItem(testKey);
       return true;
     } catch (e) {
-      console.warn(`[SafeStorage] ${this.storageType} is not available (likely sandboxed iframe or disabled). Falling back to in-memory store.`);
+      console.warn(
+        `[SafeStorage] ${this.storageType} is not available (likely sandboxed iframe or disabled). Falling back to in-memory store.`,
+      );
       return false;
     }
   }

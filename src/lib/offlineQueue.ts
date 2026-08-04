@@ -1,13 +1,13 @@
 import { safeStorage } from './safeStorage';
 
 export interface QueuedRequest {
-  id: string;          // Unique request uuid/timestamp
-  url: string;         // API path
+  id: string; // Unique request uuid/timestamp
+  url: string; // API path
   method: 'POST' | 'PUT' | 'DELETE';
   headers?: Record<string, string>;
-  body: string;        // Stringified request payload
+  body: string; // Stringified request payload
   description: string; // User-facing descriptive title (e.g. "送出 3 桌 5 份餐點" or "變更 2 號訂單為製作中")
-  timestamp: number;   // Creation time
+  timestamp: number; // Creation time
 }
 
 const STORAGE_KEY = 'sabay_offline_sync_queue_v1';
@@ -33,14 +33,13 @@ export function saveOfflineQueue(queue: QueuedRequest[]) {
   }
 }
 
-
 // Add a new request to the queue
 export function addRequestToQueue(
   url: string,
   method: 'POST' | 'PUT' | 'DELETE',
   body: any,
   description: string,
-  headers?: Record<string, string>
+  headers?: Record<string, string>,
 ): QueuedRequest {
   const queue = getOfflineQueue();
   const newItem: QueuedRequest = {
@@ -50,7 +49,7 @@ export function addRequestToQueue(
     headers: headers || { 'Content-Type': 'application/json' },
     body: typeof body === 'string' ? body : JSON.stringify(body),
     description,
-    timestamp: Date.now()
+    timestamp: Date.now(),
   };
   queue.push(newItem);
   saveOfflineQueue(queue);
@@ -63,7 +62,7 @@ export function addRequestToQueue(
 // Remove specific request from queue by ID
 export function removeRequestFromQueue(id: string) {
   const queue = getOfflineQueue();
-  const filtered = queue.filter(item => item.id !== id);
+  const filtered = queue.filter((item) => item.id !== id);
   saveOfflineQueue(filtered);
   window.dispatchEvent(new CustomEvent('offline_queue_changed', { detail: filtered }));
 }
@@ -79,12 +78,14 @@ async function executeRequest(item: QueuedRequest): Promise<Response> {
   return fetch(item.url, {
     method: item.method,
     headers: item.headers,
-    body: item.body
+    body: item.body,
   });
 }
 
 // Process all outstanding items in the queue in chronological order (FIFO)
-export async function processOfflineQueue(onProgress?: (msg: string) => void): Promise<{ successCount: number; failureCount: number }> {
+export async function processOfflineQueue(
+  onProgress?: (msg: string) => void,
+): Promise<{ successCount: number; failureCount: number }> {
   const queue = getOfflineQueue();
   if (queue.length === 0) {
     return { successCount: 0, failureCount: 0 };
@@ -107,11 +108,11 @@ export async function processOfflineQueue(onProgress?: (msg: string) => void): P
       if (response.ok) {
         successCount++;
         // Remove from remaining list
-        const idx = remaining.findIndex(r => r.id === item.id);
+        const idx = remaining.findIndex((r) => r.id === item.id);
         if (idx > -1) remaining.splice(idx, 1);
         saveOfflineQueue([...remaining]);
         window.dispatchEvent(new CustomEvent('offline_queue_changed', { detail: [...remaining] }));
-        
+
         // If this was an order submission, check if we should add it to local order ID tracker
         if (item.url === '/api/orders' && item.method === 'POST') {
           try {
@@ -125,7 +126,10 @@ export async function processOfflineQueue(onProgress?: (msg: string) => void): P
               }
             }
           } catch (err) {
-            console.warn('[OfflineQueue] Failed to parse offline order response ID injection:', err);
+            console.warn(
+              '[OfflineQueue] Failed to parse offline order response ID injection:',
+              err,
+            );
           }
         }
       } else {
@@ -135,11 +139,15 @@ export async function processOfflineQueue(onProgress?: (msg: string) => void): P
 
         // If it is a terminal client error (400-499), remove it from the queue so it doesn't block forever
         if (response.status >= 400 && response.status < 500) {
-          console.warn(`[OfflineQueue] Terminal 4xx response (${response.status}) received. Discarding request from queue.`);
-          const idx = remaining.findIndex(r => r.id === item.id);
+          console.warn(
+            `[OfflineQueue] Terminal 4xx response (${response.status}) received. Discarding request from queue.`,
+          );
+          const idx = remaining.findIndex((r) => r.id === item.id);
           if (idx > -1) remaining.splice(idx, 1);
           saveOfflineQueue([...remaining]);
-          window.dispatchEvent(new CustomEvent('offline_queue_changed', { detail: [...remaining] }));
+          window.dispatchEvent(
+            new CustomEvent('offline_queue_changed', { detail: [...remaining] }),
+          );
           continue; // Proceed with the next item in the queue
         }
 

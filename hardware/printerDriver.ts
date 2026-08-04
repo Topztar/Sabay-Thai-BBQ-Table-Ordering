@@ -5,6 +5,7 @@ import iconv from 'iconv-lite';
 export interface PrinterDriverResult {
   success: boolean;
   log: string;
+  error?: string;
 }
 
 export interface CashDrawerSettings {
@@ -13,7 +14,7 @@ export interface CashDrawerSettings {
   cashDrawerEscPosCommand?: string;
   usbPort?: string;
   cashDrawerEnabled?: boolean;
-  connectionType?: 'IP' | 'USB' | 'LPT';
+  connectionType?: 'IP' | 'USB' | 'LPT' | 'serial';
   ip?: string;
   port?: number;
 }
@@ -48,40 +49,49 @@ export interface HardwarePrinterConfig {
  */
 export async function executePrintJob(
   ticketText: string,
-  config: HardwarePrinterConfig
+  config: HardwarePrinterConfig,
 ): Promise<PrinterDriverResult> {
   const isNetwork = config.connectionType === 'IP';
   const cleanTicketText = sanitizeTextForThermalPrinter(ticketText);
   const encoding = (config.characterSet || 'big5').toLowerCase();
-  
+
   const ticketBuffer = Buffer.concat([
     ESC_POS_INIT,
     iconv.encode(cleanTicketText, encoding as any),
     Buffer.from('\n\n\n\n', 'utf-8'),
-    ESC_POS_CUT
+    ESC_POS_CUT,
   ]);
 
   if (isNetwork) {
-    return await sendToNetworkPrinter(config.ipAddress || '127.0.0.1', config.tcpPort || 9100, ticketBuffer);
+    return await sendToNetworkPrinter(
+      config.ipAddress || '127.0.0.1',
+      config.tcpPort || 9100,
+      ticketBuffer,
+    );
   } else {
     const targetPort = config.portName || 'COM1';
-    return await sendToSerialPrinter(targetPort, ticketBuffer, { baudRate: config.baudRate || 9600 });
+    return await sendToSerialPrinter(targetPort, ticketBuffer, {
+      baudRate: config.baudRate || 9600,
+    });
   }
 }
 
 // ESC/POS Command Buffers
-export const ESC_POS_INIT = Buffer.from([0x1B, 0x40, 0x1C, 0x26, 0x1C, 0x43, 0x01]); // ESC @ (Init), FS & (Kanji Mode), FS C 1 (Big5 Mode)
-export const ESC_POS_CUT = Buffer.from([0x1D, 0x56, 0x00]); // GS V 0 (Full cut)
-export const ESC_POS_DRAWER_PULSE_DEFAULT = Buffer.from([0x1B, 0x70, 0x00, 0x19, 0xFA]); // ESC p m t1 t2 (25ms pulse to Pin 2)
+export const ESC_POS_INIT = Buffer.from([0x1b, 0x40, 0x1c, 0x26, 0x1c, 0x43, 0x01]); // ESC @ (Init), FS & (Kanji Mode), FS C 1 (Big5 Mode)
+export const ESC_POS_CUT = Buffer.from([0x1d, 0x56, 0x00]); // GS V 0 (Full cut)
+export const ESC_POS_DRAWER_PULSE_DEFAULT = Buffer.from([0x1b, 0x70, 0x00, 0x19, 0xfa]); // ESC p m t1 t2 (25ms pulse to Pin 2)
 
 /**
- * Sanitizes ticket text for physical thermal printers by stripping/replacing emojis 
+ * Sanitizes ticket text for physical thermal printers by stripping/replacing emojis
  * and non-Big5 symbols that corrupt 2-byte Big5 alignment.
  */
 export function sanitizeTextForThermalPrinter(text: string): string {
   if (!text) return '';
   return text
-    .replace(/[\u{1F300}-\u{1F9FF}]|[\u{1F600}-\u{1F64F}]|[\u{1F680}-\u{1F6FF}]|[\u{2600}-\u{26FF}]|[\u{2700}-\u{27BF}]/gu, '')
+    .replace(
+      /[\u{1F300}-\u{1F9FF}]|[\u{1F600}-\u{1F64F}]|[\u{1F680}-\u{1F6FF}]|[\u{2600}-\u{26FF}]|[\u{2700}-\u{27BF}]/gu,
+      '',
+    )
     .replace(/[\uD800-\uDBFF][\uDC00-\uDFFF]/g, '');
 }
 
@@ -92,7 +102,7 @@ export async function sendToNetworkPrinter(
   host: string,
   port: number = 9100,
   data: Buffer | string,
-  options: { timeoutMs?: number; retries?: number } = {}
+  options: { timeoutMs?: number; retries?: number } = {},
 ): Promise<PrinterDriverResult> {
   const timeoutMs = options.timeoutMs ?? 1500;
   const maxRetries = options.retries ?? 1;
@@ -126,14 +136,14 @@ export async function sendToNetworkPrinter(
               cleanup();
               resolve({
                 success: false,
-                log: `${logPrefix} Send failed: ${err.message}`
+                log: `${logPrefix} Send failed: ${err.message}`,
               });
             } else {
               socket.end();
               cleanup();
               resolve({
                 success: true,
-                log: `${logPrefix} Successfully sent ${bufferData.length} bytes to thermal printer at ${host}:${port}.`
+                log: `${logPrefix} Successfully sent ${bufferData.length} bytes to thermal printer at ${host}:${port}.`,
               });
             }
           });
@@ -145,7 +155,7 @@ export async function sendToNetworkPrinter(
           cleanup();
           resolve({
             success: false,
-            log: `${logPrefix} Connection timed out after ${timeoutMs}ms.`
+            log: `${logPrefix} Connection timed out after ${timeoutMs}ms.`,
           });
         });
 
@@ -155,7 +165,7 @@ export async function sendToNetworkPrinter(
           cleanup();
           resolve({
             success: false,
-            log: `${logPrefix} Network Socket Error: ${err.message}`
+            log: `${logPrefix} Network Socket Error: ${err.message}`,
           });
         });
 
@@ -172,10 +182,12 @@ export async function sendToNetworkPrinter(
     }
   }
 
-  console.warn(`[Real Hardware Network] Connection to ${host}:${port} failed after retries. Log: ${lastError}`);
+  console.warn(
+    `[Real Hardware Network] Connection to ${host}:${port} failed after retries. Log: ${lastError}`,
+  );
   return {
     success: true,
-    log: `[Simulated Network Fallback] ${lastError} (Printer offline or IP unreachable, fell back to simulation)`
+    log: `[Simulated Network Fallback] ${lastError} (Printer offline or IP unreachable, fell back to simulation)`,
   };
 }
 
@@ -185,7 +197,7 @@ export async function sendToNetworkPrinter(
 export async function sendToSerialPrinter(
   portName: string,
   data: Buffer | string,
-  options: { baudRate?: number } = {}
+  options: { baudRate?: number } = {},
 ): Promise<PrinterDriverResult> {
   const baudRate = options.baudRate ?? 9600;
   const bufferData = Buffer.isBuffer(data) ? data : Buffer.from(data, 'utf-8');
@@ -200,13 +212,15 @@ export async function sendToSerialPrinter(
           console.warn(`${logPrefix} Parallel port write error:`, err.message);
           resolve({
             success: true,
-            log: `[Simulated Parallel Port Fallback] Parallel port write error: ${err.message}`
+            log: `[Simulated Parallel Port Fallback] Parallel port write error: ${err.message}`,
           });
         } else {
-          console.log(`${logPrefix} Successfully written ${bufferData.length} bytes to ${targetPort}.`);
+          console.log(
+            `${logPrefix} Successfully written ${bufferData.length} bytes to ${targetPort}.`,
+          );
           resolve({
             success: true,
-            log: `${logPrefix} Successfully sent ${bufferData.length} bytes to LPT printer at ${targetPort}.`
+            log: `${logPrefix} Successfully sent ${bufferData.length} bytes to LPT printer at ${targetPort}.`,
           });
         }
       });
@@ -219,10 +233,13 @@ export async function sendToSerialPrinter(
     const spModule = require('serialport');
     SerialPortClass = spModule.SerialPort || spModule;
   } catch (err: any) {
-    console.warn(`${logPrefix} SerialPort library unavailable or missing native bindings:`, err?.message);
+    console.warn(
+      `${logPrefix} SerialPort library unavailable or missing native bindings:`,
+      err?.message,
+    );
     return {
       success: false,
-      log: `${logPrefix} [Simulated Fallback] serialport library not available on host system.`
+      log: `${logPrefix} [Simulated Fallback] serialport library not available on host system.`,
     };
   }
 
@@ -232,7 +249,7 @@ export async function sendToSerialPrinter(
       const portInstance = new SerialPortClass({
         path: targetPort,
         baudRate: baudRate,
-        autoOpen: false
+        autoOpen: false,
       });
 
       portInstance.open((openErr: any) => {
@@ -240,7 +257,7 @@ export async function sendToSerialPrinter(
           console.warn(`${logPrefix} Failed to open port: ${openErr.message}`);
           return resolve({
             success: true,
-            log: `[Simulated Serial Port Fallback] Open port failed: ${openErr.message}`
+            log: `[Simulated Serial Port Fallback] Open port failed: ${openErr.message}`,
           });
         }
 
@@ -250,7 +267,7 @@ export async function sendToSerialPrinter(
             portInstance.close();
             return resolve({
               success: false,
-              log: `${logPrefix} Write error: ${writeErr.message}`
+              log: `${logPrefix} Write error: ${writeErr.message}`,
             });
           }
 
@@ -259,13 +276,13 @@ export async function sendToSerialPrinter(
             if (drainErr) {
               return resolve({
                 success: false,
-                log: `${logPrefix} Drain error: ${drainErr.message}`
+                log: `${logPrefix} Drain error: ${drainErr.message}`,
               });
             }
             console.log(`${logPrefix} Successfully written ${bufferData.length} bytes.`);
             resolve({
               success: true,
-              log: `${logPrefix} Successfully sent ${bufferData.length} bytes to USB/Serial printer at ${targetPort}.`
+              log: `${logPrefix} Successfully sent ${bufferData.length} bytes to USB/Serial printer at ${targetPort}.`,
             });
           });
         });
@@ -274,7 +291,7 @@ export async function sendToSerialPrinter(
       console.warn(`${logPrefix} Serial port exception:`, err?.message);
       resolve({
         success: false,
-        log: `${logPrefix} Exception opening port: ${err?.message || err}`
+        log: `${logPrefix} Exception opening port: ${err?.message || err}`,
       });
     }
   });
@@ -309,7 +326,9 @@ function resolvePortName(userPort: string): string {
 /**
  * Triggers Real Physical Cash Drawer via ESC/POS pulse signal or logs OPOS/POS_NET simulation
  */
-export async function triggerRealCashDrawer(settings: CashDrawerSettings): Promise<PrinterDriverResult> {
+export async function triggerRealCashDrawer(
+  settings: CashDrawerSettings,
+): Promise<PrinterDriverResult> {
   const driver = settings.cashDrawerDriver || 'ESC_POS_RAW';
   const rawCommandHex = settings.cashDrawerEscPosCommand || '1B700019FA';
   const portName = settings.usbPort || 'USB002';
@@ -328,7 +347,9 @@ export async function triggerRealCashDrawer(settings: CashDrawerSettings): Promi
   }
 
   // Real physical cash drawer ESC/POS driver execution for all driver configurations (OPOS / POS_NET / ESC_POS_RAW)
-  console.log(`[Real Hardware Cash Drawer] Triggering ESC/POS drawer pulse hex [${rawCommandHex}] (Driver: ${driver})`);
+  console.log(
+    `[Real Hardware Cash Drawer] Triggering ESC/POS drawer pulse hex [${rawCommandHex}] (Driver: ${driver})`,
+  );
   if (isNetwork) {
     return await sendToNetworkPrinter(targetIp, targetPort, drawerBuffer);
   } else {
@@ -341,7 +362,7 @@ export async function triggerRealCashDrawer(settings: CashDrawerSettings): Promi
  */
 export async function printKitchenTicket(
   ticketText: string,
-  settings: PrinterDeviceSettings = {}
+  settings: PrinterDeviceSettings = {},
 ): Promise<PrinterDriverResult> {
   const host = settings.ip || '192.168.123.100';
   const port = settings.port || 9100;
@@ -352,7 +373,7 @@ export async function printKitchenTicket(
     ESC_POS_INIT,
     iconv.encode(cleanTicketText, 'big5'),
     Buffer.from('\n\n\n\n', 'utf-8'),
-    ESC_POS_CUT
+    ESC_POS_CUT,
   ]);
 
   if (isNetwork) {
@@ -368,7 +389,7 @@ export async function printKitchenTicket(
  */
 export async function printCustomerReceipt(
   receiptText: string,
-  settings: PrinterDeviceSettings = {}
+  settings: PrinterDeviceSettings = {},
 ): Promise<PrinterDriverResult> {
   const portName = settings.usbPort || (settings.connectionType === 'LPT' ? 'LPT1' : 'USB002');
   const host = settings.ip || '192.168.123.100';
@@ -379,7 +400,7 @@ export async function printCustomerReceipt(
     ESC_POS_INIT,
     iconv.encode(cleanReceiptText, 'big5'),
     Buffer.from('\n\n\n', 'utf-8'),
-    ESC_POS_CUT
+    ESC_POS_CUT,
   ]);
 
   let printRes: PrinterDriverResult;
@@ -397,7 +418,7 @@ export async function printCustomerReceipt(
       usbPort: portName,
       connectionType: settings.connectionType,
       ip: host,
-      port: settings.port || 9100
+      port: settings.port || 9100,
     });
     printRes.log += `\n${drawerRes.log}`;
   }

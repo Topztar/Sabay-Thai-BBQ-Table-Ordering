@@ -11,11 +11,23 @@ export default defineConfig({
       '/ws': {
         target: 'ws://localhost:3001',
         ws: true,
-      }
-    }
+      },
+    },
   },
   test: {
     environment: 'jsdom',
-    globals: true
-  }
+    globals: true,
+  },
+  build: {
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          vendor: ['react', 'react-dom'],
+          query: ['@tanstack/react-query'],
+          firebase: ['firebase/firestore', 'firebase/app'],
+          icons: ['lucide-react'],
+        },
+      },
+    },
+  },
 } as any);

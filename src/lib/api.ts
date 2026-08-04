@@ -1,6 +1,6 @@
 export const getAuthHeader = () => {
   const token = localStorage.getItem('sabay_jwt_token');
-  return token ? { 'Authorization': `Bearer ${token}` } : {};
+  return token ? { Authorization: `Bearer ${token}` } : {};
 };
 
 export const apiFetch = async (url: string, options: any = {}) => {

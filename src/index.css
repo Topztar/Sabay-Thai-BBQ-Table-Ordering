@@ -1,26 +1,26 @@
 @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400..900;1,400..900&family=Outfit:wght@400;500;600;700&family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap');
-@import "tailwindcss";
+@import 'tailwindcss';
 
 @theme {
-  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
-  --font-display: "Outfit", "Inter", sans-serif;
-  --font-serif: "Playfair Display", Georgia, serif;
-  --font-mono: "JetBrains Mono", monospace;
-  
-  --color-thai-gold: #E5B453;
-  --color-thai-gold-hover: #F0C46B;
-  --color-thai-dark: #0F0F0F;
+  --font-sans: 'Inter', ui-sans-serif, system-ui, sans-serif;
+  --font-display: 'Outfit', 'Inter', sans-serif;
+  --font-serif: 'Playfair Display', Georgia, serif;
+  --font-mono: 'JetBrains Mono', monospace;
+
+  --color-thai-gold: #e5b453;
+  --color-thai-gold-hover: #f0c46b;
+  --color-thai-dark: #0f0f0f;
   --color-thai-charcoal: #161616;
   --color-thai-card: rgba(255, 255, 255, 0.05);
   --color-thai-border: rgba(255, 255, 255, 0.1);
-  --color-thai-green: #00C300;
-  --color-thai-chili: #FF4D4D;
+  --color-thai-green: #00c300;
+  --color-thai-chili: #ff4d4d;
 }
 
 @layer base {
   body {
     font-family: var(--font-sans);
-    background-color: #0F0F0F;
+    background-color: #0f0f0f;
     color: #ffffff;
     -webkit-font-smoothing: antialiased;
   }
@@ -44,8 +44,12 @@
 
 /* Marquee animation classes */
 @keyframes marquee {
-  0% { transform: translate3d(0, 0, 0); }
-  100% { transform: translate3d(-50%, 0, 0); }
+  0% {
+    transform: translate3d(0, 0, 0);
+  }
+  100% {
+    transform: translate3d(-50%, 0, 0);
+  }
 }
 
 .animate-marquee {
@@ -60,18 +64,19 @@
 
 /* Red breathing glow animation for delayed orders */
 @keyframes borderGlowRed {
-  0%, 100% {
+  0%,
+  100% {
     border-color: rgba(239, 68, 68, 0.35);
     box-shadow: 0 0 6px rgba(239, 68, 68, 0.2);
   }
   50% {
     border-color: rgba(239, 68, 68, 1);
-    box-shadow: 0 0 18px rgba(239, 68, 68, 0.75), inset 0 0 6px rgba(239, 68, 68, 0.3);
+    box-shadow:
+      0 0 18px rgba(239, 68, 68, 0.75),
+      inset 0 0 6px rgba(239, 68, 68, 0.3);
   }
 }
 
 .animate-red-breathing-glow {
   animation: borderGlowRed 1.8s infinite ease-in-out;
 }
-
-

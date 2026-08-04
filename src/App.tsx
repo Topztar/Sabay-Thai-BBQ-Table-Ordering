@@ -1,17 +1,49 @@
-import { useState, useEffect, useRef } from 'react';
-import { Language, MenuItem, Ingredient, Order, OrderStatus, OrderItem, Category, TableConfig, OperatingHourSlot, Reservation } from './types';
-import { getOfflineQueue, addRequestToQueue, clearOfflineQueue, processOfflineQueue, QueuedRequest } from './lib/offlineQueue';
+import React, { useState, useEffect, useRef, Suspense, lazy } from 'react';
+import { useGlobalState } from './contexts/GlobalContext';
+import {
+  Language,
+  MenuItem,
+  Ingredient,
+  Order,
+  OrderStatus,
+  OrderItem,
+  Category,
+  TableConfig,
+  OperatingHourSlot,
+  Reservation,
+} from './types';
+import {
+  getOfflineQueue,
+  addRequestToQueue,
+  clearOfflineQueue,
+  processOfflineQueue,
+  QueuedRequest,
+} from './lib/offlineQueue';
 import { safeStorage } from './lib/safeStorage';
 import { apiFetch } from './lib/api';
 import { db, isFirebaseSyncEnabled } from './lib/firebase';
 import { collection, onSnapshot, query, orderBy } from 'firebase/firestore';
 import { TRANSLATIONS, INITIAL_MENU, INITIAL_CATEGORIES } from './data';
 import { LanguageSelector } from './components/LanguageSelector';
-import { CustomerOrderView } from './components/CustomerOrderView';
-import { KitchenDisplaySystem } from './components/KitchenDisplaySystem';
-import { ManagerDashboard } from './components/ManagerDashboard';
-import { StaffLoginGate } from './components/StaffLoginGate';
-import { ChefHat, Smartphone, BarChart3, UtensilsCrossed, LogOut, Lock, Phone, MapPin, Eye, EyeOff, Coins, Monitor } from 'lucide-react';
+
+const CustomerOrderView = lazy(() => import('./components/CustomerOrderView').then(m => ({ default: m.CustomerOrderView })));
+const KitchenDisplaySystem = lazy(() => import('./components/KitchenDisplaySystem').then(m => ({ default: m.KitchenDisplaySystem })));
+const ManagerDashboard = lazy(() => import('./components/ManagerDashboard').then(m => ({ default: m.ManagerDashboard })));
+const StaffLoginGate = lazy(() => import('./components/StaffLoginGate').then(m => ({ default: m.StaffLoginGate })));
+import {
+  ChefHat,
+  Smartphone,
+  BarChart3,
+  UtensilsCrossed,
+  LogOut,
+  Lock,
+  Phone,
+  MapPin,
+  Eye,
+  EyeOff,
+  Coins,
+  Monitor,
+} from 'lucide-react';
 
 interface AnalyticsData {
   totalRevenue: number;
@@ -23,23 +55,48 @@ interface AnalyticsData {
 }
 
 export default function App() {
-  const [lang, setLang] = useState<Language>(() => {
+
+  const {
+    lang, setLang, menuItems, setMenuItems, ingredients, setIngredients, orders, setOrders,
+    categories, setCategories, tables, setTables, reservations, minSpend, setMinSpend, promoCombo, setPromoCombo,
+    operatingHours, setOperatingHours, isOpen, setIsOpen, restDays, setRestDays, customerNotice, setCustomerNotice, servicePaused, setServicePaused, popularItemIds, setPopularItemIds,
+    memberPointsRatio, setMemberPointsRatio, memberRewards, setMemberRewards, printLogs, setPrintLogs, printerIp, setPrinterIp, pushNotifications, setPushNotifications, analytics, setAnalytics,
+    loading, offlineQueue, isSyncing, syncProgressMsg, isNetworkOnline, fetchData, handleForceSync
+  } = useGlobalState();
+  
+  const [localOrderIds, setLocalOrderIds] = useState<string[]>(() => {
     try {
-      const stored = safeStorage.getItem('sabay-language');
-      return (stored as Language) || 'zh';
+      const stored = window.localStorage.getItem('sabay-my-submitted-order-ids');
+      return stored ? JSON.parse(stored) : [];
     } catch {
-      return 'zh';
+      return [];
     }
   });
+  const [showContactDetails, setShowContactDetails] = useState(false);
+  const activeOrderSubmissionsRef = useRef<Set<string>>(new Set());
+  const lastCategoryReorderTimeRef = useRef<number>(0);
+  const lastMenuReorderTimeRef = useRef<number>(0);
 
-  const handleLanguageChange = (newLang: Language) => {
-    setLang(newLang);
-    safeStorage.setItem('sabay-language', newLang);
-  };
 
-  const [activeTab, setActiveTab] = useState<'customer' | 'kitchen' | 'admin' | 'cashier'>('customer');
+  const handleLanguageChange = setLang;
 
-  const [adminSubTab, setAdminSubTab] = useState<'stats' | 'orders' | 'inventory' | 'menu' | 'members' | 'cashier' | 'printer' | 'options' | 'eod' | 'terminal' | undefined>(undefined);
+  const [activeTab, setActiveTab] = useState<'customer' | 'kitchen' | 'admin' | 'cashier'>(
+    'customer',
+  );
+
+  const [adminSubTab, setAdminSubTab] = useState<
+    | 'stats'
+    | 'orders'
+    | 'inventory'
+    | 'menu'
+    | 'members'
+    | 'cashier'
+    | 'printer'
+    | 'options'
+    | 'eod'
+    | 'terminal'
+    | undefined
+  >(undefined);
 
   // Secure staff role gating
   const [isStaff, setIsStaff] = useState<boolean>(false);
@@ -102,343 +159,6 @@ export default function App() {
     setCurrentPath(path);
   };
 
-  // Helper to enrich menu items with missing translations
-  const enrichMenuItems = (items: MenuItem[]): MenuItem[] => {
-    if (!Array.isArray(items)) return [];
-    const defaults = INITIAL_MENU || [];
-    return items.map(item => {
-      const defaultItem = defaults.find(x => x.id === item.id);
-      if (defaultItem) {
-        const cleanName = { ...item.name };
-        const cleanDesc = { ...item.description };
-        ['ko', 'ja', 'th', 'vi'].forEach(lang => {
-          if (cleanName[lang as Language] === cleanName['zh']) delete cleanName[lang as Language];
-          if (cleanDesc[lang as Language] === cleanDesc['zh']) delete cleanDesc[lang as Language];
-        });
-        const name = { ...defaultItem.name, ...cleanName };
-        const description = { ...defaultItem.description, ...cleanDesc };
-        return { ...item, name, description };
-      }
-      return item;
-    });
-  };
-
-  // Helper to enrich categories with missing translations
-  const enrichCategories = (cats: Category[]): Category[] => {
-    if (!Array.isArray(cats)) return [];
-    const defaults = INITIAL_CATEGORIES || [];
-    return cats.map(cat => {
-      const defaultCat = defaults.find(c => c.id === cat.id);
-      if (defaultCat) {
-        const name = { ...defaultCat.name, ...cat.name };
-        return { ...cat, name };
-      }
-      return cat;
-    });
-  };
-
-  // Core synchronized application state
-  const [menuItems, setMenuItemsRaw] = useState<MenuItem[]>([]);
-  const setMenuItems = (val: MenuItem[] | ((prev: MenuItem[]) => MenuItem[])) => {
-    if (typeof val === 'function') {
-      setMenuItemsRaw(prev => enrichMenuItems(val(prev)));
-    } else {
-      setMenuItemsRaw(enrichMenuItems(val));
-    }
-  };
-
-  const [ingredients, setIngredients] = useState<Ingredient[]>([]);
-  const [orders, setOrders] = useState<Order[]>([]);
-
-  const [categories, setCategoriesRaw] = useState<Category[]>([]);
-  const setCategories = (val: Category[] | ((prev: Category[]) => Category[])) => {
-    if (typeof val === 'function') {
-      setCategoriesRaw(prev => enrichCategories(val(prev)));
-    } else {
-      setCategoriesRaw(enrichCategories(val));
-    }
-  };
-  const [tables, setTables] = useState<TableConfig[]>([]);
-  const [reservations, setReservations] = useState<Reservation[]>([]);
-  const [minSpend, setMinSpend] = useState<number>(200);
-  const [promoCombo, setPromoCombo] = useState<any>({
-    enabled: false,
-    requiredQty: 0,
-    discountAmount: 0,
-    eligibleItemIds: []
-  });
-  const [operatingHours, setOperatingHours] = useState<OperatingHourSlot[]>([]);
-  const [isOpen, setIsOpen] = useState<boolean>(true);
-  const [restDays, setRestDays] = useState<string[]>([]);
-  const [customerNotice, setCustomerNotice] = useState<string>('');
-  const [servicePaused, setServicePaused] = useState<boolean>(false);
-  const [popularItemIds, setPopularItemIds] = useState<string[]>(['ty-01', 'nd-01', 'sk-02', 'sk-01']);
-  const [memberPointsRatio, setMemberPointsRatio] = useState<number>(20);
-  const [memberRewards, setMemberRewards] = useState<any[]>([]);
-  const lastCategoryReorderTimeRef = useRef<number>(0);
-  const lastMenuReorderTimeRef = useRef<number>(0);
-
-  const [printLogs, setPrintLogs] = useState<any[]>([]);
-  const [printerIp, setPrinterIp] = useState<string>('192.168.123.100');
-  const [pushNotifications, setPushNotifications] = useState<any[]>([]);
-  const [analytics, setAnalytics] = useState<AnalyticsData>({
-    totalRevenue: 0,
-    ordersCount: 0,
-    categorySales: [],
-    hourlyDistribution: [],
-    topDishes: [],
-    stockWarnings: [],
-  });
-
-  const [, setLocalOrderIds] = useState<string[]>(() => {
-    try {
-      const stored = safeStorage.getItem('sabay-my-submitted-order-ids');
-      return stored ? JSON.parse(stored) : [];
-    } catch {
-      return [];
-    }
-  });
-
-  const [loading, setLoading] = useState(true);
-  const [showContactDetails, setShowContactDetails] = useState(false);
-
-  const pollingCycleRef = useRef<number>(0);
-  const activeOrderSubmissionsRef = useRef<Set<string>>(new Set());
-
-  // Offline sync queue states
-  const [offlineQueue, setOfflineQueue] = useState<QueuedRequest[]>(getOfflineQueue());
-  const [isSyncing, setIsSyncing] = useState<boolean>(false);
-  const [syncProgressMsg, setSyncProgressMsg] = useState<string>('');
-  const [isNetworkOnline, setIsNetworkOnline] = useState<boolean>(typeof navigator !== 'undefined' ? navigator.onLine : true);
-
-  useEffect(() => {
-    if (typeof window === 'undefined') return;
-    const updateOnlineStatus = () => {
-      setIsNetworkOnline(typeof navigator !== 'undefined' ? navigator.onLine : true);
-    };
-    window.addEventListener('online', updateOnlineStatus);
-    window.addEventListener('offline', updateOnlineStatus);
-
-    const handleQueueChange = (e: Event) => {
-      const customEvent = e as CustomEvent<QueuedRequest[]>;
-      setOfflineQueue(customEvent.detail || getOfflineQueue());
-    };
-    window.addEventListener('offline_queue_changed', handleQueueChange);
-
-    return () => {
-      window.removeEventListener('online', updateOnlineStatus);
-      window.removeEventListener('offline', updateOnlineStatus);
-      window.removeEventListener('offline_queue_changed', handleQueueChange);
-    };
-  }, []);
-
-  // Automatic sync when connection is restored
-  useEffect(() => {
-    if (isNetworkOnline && offlineQueue.length > 0) {
-      handleForceSync();
-    }
-  }, [isNetworkOnline, offlineQueue.length]);
-
-  const handleForceSync = async () => {
-    if (isSyncing) return;
-    setIsSyncing(true);
-    setSyncProgressMsg('正在準備批次重發...');
-    try {
-      const result = await processOfflineQueue((progress) => setSyncProgressMsg(progress));
-      if (result.successCount > 0) {
-        console.log(`[Offline Sync] Successfully synced ${result.successCount} requests!`);
-        await fetchData(true);
-      }
-    } catch (e) {
-      console.error('[Offline Sync Error]', e);
-    } finally {
-      setIsSyncing(false);
-      setSyncProgressMsg('');
-    }
-  };
-
-  // Fetch initial data
-  const fetchData = async (forceFull: boolean = true, bypassReorderLock: boolean = false) => {
-    const fetchStartTime = Date.now();
-    try {
-      const fallbackAnalytics = {
-        totalRevenue: 0,
-        ordersCount: 0,
-        categorySales: [],
-        hourlyDistribution: [],
-        topDishes: [],
-        stockWarnings: [],
-      };
-
-      const safeFetch = async (url: string, fallbackVal: any) => {
-        try {
-          const res = await fetch(url);
-          return res;
-        } catch (err) {
-          console.warn(`[Sabay Sync] Failed network fetch for ${url}:`, err);
-          return {
-            ok: false,
-            status: 503,
-            headers: new Headers(),
-            json: async () => fallbackVal,
-            text: async () => '',
-            clone: function() { return this; }
-          } as unknown as Response;
-        }
-      };
-
-      const isFullCycle = forceFull || pollingCycleRef.current === 0 || pollingCycleRef.current % 5 === 0;
-      pollingCycleRef.current = pollingCycleRef.current + 1;
-
-      const promises: Promise<any>[] = [
-        safeFetch('/api/ingredients', []),
-        safeFetch('/api/orders', []),
-        safeFetch('/api/print-logs', []),
-        safeFetch('/api/push-notifications', []),
-        safeFetch('/api/analytics', fallbackAnalytics),
-        safeFetch('/api/tables', []),
-        safeFetch('/api/reservations', []),
-        safeFetch('/api/settings/service-pause', { servicePaused: false }),
-      ];
-
-      if (isFullCycle) {
-        promises.push(
-          safeFetch('/api/menu', []),
-          safeFetch('/api/categories', []),
-          safeFetch('/api/printer/config', {}),
-          safeFetch('/api/settings/min-spend', { minSpend: 200 }),
-          safeFetch('/api/settings/operating-hours', {}),
-          safeFetch('/api/settings/customer-notice', {}),
-          safeFetch('/api/promo-combo', { enabled: true, requiredQty: 10, discountAmount: 20, eligibleItemIds: [] }),
-          safeFetch('/api/settings/popular-item-ids', ['ty-01', 'nd-01', 'sk-02', 'sk-01']),
-          safeFetch('/api/settings/members-config', { pointsRatio: 20, rewards: [] })
-        );
-      }
-
-      const results = await Promise.all(promises);
-
-      const safeJson = async (res: Response, fallback: any, _label: string) => {
-        try {
-          if (!res.ok) return fallback;
-          const contentType = res.headers.get('content-type');
-          if (!contentType || !contentType.includes('application/json')) return fallback;
-          return await res.json();
-        } catch (e) {
-          return fallback;
-        }
-      };
-
-      const ingData = await safeJson(results[0], [], 'ingredients');
-      const ordData = await safeJson(results[1], [], 'orders');
-      const printData = await safeJson(results[2], [], 'print-logs');
-      const notifData = await safeJson(results[3], [], 'push-notifications');
-      const alyData = await safeJson(results[4], fallbackAnalytics, 'analytics');
-      const tablesData = await safeJson(results[5], [], 'tables');
-      const resveData = await safeJson(results[6], [], 'reservations');
-      const servicePauseData = await safeJson(results[7], { servicePaused: false }, 'service-pause');
-
-      setIngredients(ingData);
-      setOrders(ordData);
-      setPrintLogs(printData);
-      setTables(tablesData);
-      setReservations(resveData);
-      setAnalytics(alyData);
-      if (servicePauseData) setServicePaused(!!servicePauseData.servicePaused);
-      if (Array.isArray(notifData)) setPushNotifications(notifData.filter((n: any) => !n.isRead));
-
-      if (isFullCycle && results.length > 8) {
-        const menuData = await safeJson(results[8], [], 'menu');
-        const catData = await safeJson(results[9], [], 'categories');
-        const printerData = await safeJson(results[10], {}, 'printer-config');
-        const minSpendData = await safeJson(results[11], { minSpend: 200 }, 'min-spend');
-        const opHoursData = await safeJson(results[12], {}, 'operating-hours');
-        const noticeData = await safeJson(results[13], {}, 'customer-notice');
-        const promoData = await safeJson(results[14], { enabled: false, requiredQty: 0, discountAmount: 0, eligibleItemIds: [] }, 'promo-combo');
-        const popularData = await safeJson(results[15], ['ty-01', 'nd-01', 'sk-02', 'sk-01'], 'popular-item-ids');
-        const memberConfigData = await safeJson(results[16], { pointsRatio: 20, rewards: [] }, 'members-config');
-
-        if (bypassReorderLock || fetchStartTime > lastMenuReorderTimeRef.current) setMenuItems(menuData);
-        setPrinterIp(printerData.ip || '192.168.123.100');
-        if (Array.isArray(popularData)) setPopularItemIds(popularData);
-        if (memberConfigData) {
-          if (memberConfigData.pointsRatio !== undefined) setMemberPointsRatio(memberConfigData.pointsRatio);
-          if (memberConfigData.rewards) setMemberRewards(memberConfigData.rewards);
-        }
-        if (promoData) setPromoCombo(promoData);
-        if (minSpendData && minSpendData.minSpend !== undefined) setMinSpend(minSpendData.minSpend);
-        if (opHoursData) {
-          if (opHoursData.slots) setOperatingHours(opHoursData.slots);
-          if (opHoursData.restDays) setRestDays(opHoursData.restDays);
-          setIsOpen(opHoursData.isOpen ?? true);
-        }
-        if (noticeData && noticeData.notice !== undefined) setCustomerNotice(noticeData.notice);
-        if (bypassReorderLock || fetchStartTime > lastCategoryReorderTimeRef.current) setCategories(catData);
-      }
-
-      if (window.location.pathname === '/FSY20260606') {
-        setStaffPin('FSY20260606');
-        setIsStaff(true);
-      } else if (window.location.pathname === '/888888') {
-        setStaffPin('888888');
-      } else {
-        const legacyMatch = window.location.pathname.match(/^\/(\d{4,6})$/);
-        if (legacyMatch) {
-          window.history.replaceState({}, '', '/');
-          setCurrentPath('/');
-          setStaffPin('');
-        } else {
-          setStaffPin('');
-        }
-      }
-    } catch (err: any) {
-      console.warn('[Sabay Sync] Fetch error:', err);
-    } finally {
-      setLoading(false);
-    }
-  };
-  useEffect(() => {
-    fetchData();
-
-    let unsubscribeOrders = () => {};
-    let unsubscribeIngredients = () => {};
-
-    if (isFirebaseSyncEnabled()) {
-      try {
-        // 實時監聽訂單
-        const ordersQuery = query(collection(db, "orders"), orderBy("createdAt", "desc"));
-        unsubscribeOrders = onSnapshot(ordersQuery, (snapshot) => {
-          const updatedOrders = snapshot.docs.map(doc => ({ ...doc.data() } as Order));
-          setOrders(updatedOrders);
-        }, (error) => {
-          console.warn('[Firebase Sync] Orders listener paused/disabled:', error);
-        });
-
-        // 實時監聽庫存
-        unsubscribeIngredients = onSnapshot(collection(db, "ingredients"), (snapshot) => {
-          const updatedIngredients = snapshot.docs.map(doc => doc.data() as Ingredient);
-          setIngredients(updatedIngredients);
-        }, (error) => {
-          console.warn('[Firebase Sync] Ingredients listener paused/disabled:', error);
-        });
-      } catch (e) {
-        console.warn('[Firebase Sync] Realtime listener initialization skipped:', e);
-      }
-    } else {
-      console.log('⛔ [Firebase Sync] Firebase 同步已停止，轉用本地 API 定時自動輪詢。');
-    }
-
-    // 當 Firebase 同步停止時，使用 5 秒自動輪詢維護本地資料同步
-    const localPollingTimer = setInterval(() => {
-      fetchData(false);
-    }, 5000);
-
-    return () => {
-      unsubscribeOrders();
-      unsubscribeIngredients();
-      clearInterval(localPollingTimer);
-    };
-  }, []);
-
   // 🔄 自動連動桌席狀態與訂單/KDS/預約 (Real-time Table Status Auto-Sync)
   useEffect(() => {
     if (!tables || tables.length === 0) return;
@@ -451,18 +171,19 @@ export default function App() {
       const dy = String(now.getDate()).padStart(2, '0');
       const todayStr = `${yr}-${mo}-${dy}`;
 
-      setTables(prevTables => {
+      setTables((prevTables) => {
         let hasChanges = false;
-        const newTables = prevTables.map(tb => {
+        const newTables = prevTables.map((tb) => {
           const tblId = String(tb.id).trim();
 
           // 1. 該桌目前尚未結帳/取消的有效訂單
-          const activeOrders = orders.filter(o => 
-            String(o.tableNumber).trim() === tblId && 
-            o.status !== 'cancelled'
+          const activeOrders = orders.filter(
+            (o) => String(o.tableNumber).trim() === tblId && o.status !== 'cancelled',
           );
 
-          const unpaidActiveOrders = activeOrders.filter(o => !o.isPaid && o.status !== 'completed' && o.status !== 'paid');
+          const unpaidActiveOrders = activeOrders.filter(
+            (o) => !o.isPaid && o.status !== 'completed' && o.status !== 'paid',
+          );
 
           if (unpaidActiveOrders.length > 0) {
             const targetStatus = tb.status === 'pending_checkout' ? 'pending_checkout' : 'in_use';
@@ -479,16 +200,20 @@ export default function App() {
             return {
               ...tb,
               status: 'cleaning',
-              cleaningStartedAt: tb.cleaningStartedAt || new Date().toISOString()
+              cleaningStartedAt: tb.cleaningStartedAt || new Date().toISOString(),
             };
           }
 
           // 3. 若處於清潔中，檢查是否已超過 15 分鐘無新訂單
           if (tb.status === 'cleaning') {
-            let cleaningStartMs = tb.cleaningStartedAt ? new Date(tb.cleaningStartedAt).getTime() : 0;
+            let cleaningStartMs = tb.cleaningStartedAt
+              ? new Date(tb.cleaningStartedAt).getTime()
+              : 0;
             if (!cleaningStartMs || isNaN(cleaningStartMs)) {
               // Fallback to latest paid order timestamp
-              const latestOrder = activeOrders.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())[0];
+              const latestOrder = activeOrders.sort(
+                (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
+              )[0];
               if (latestOrder && latestOrder.createdAt) {
                 cleaningStartMs = new Date(latestOrder.createdAt).getTime();
               } else {
@@ -499,10 +224,11 @@ export default function App() {
             // 15 分鐘 (900,000 毫秒) 緩衝結束且無新訂單 -> 自動轉為「空桌」或「預約」
             if (nowMs - cleaningStartMs >= 15 * 60 * 1000) {
               // 檢查今日後續是否有預約
-              const todayPendingRes = reservations.find(r => 
-                String(r.tableNumber).trim() === tblId &&
-                (r.status === 'pending' || r.status === 'upcoming' || r.status === 'confirmed') &&
-                r.date.trim() === todayStr
+              const todayPendingRes = reservations.find(
+                (r) =>
+                  String(r.tableNumber).trim() === tblId &&
+                  (r.status === 'pending' || r.status === 'upcoming' || r.status === 'confirmed') &&
+                  r.date.trim() === todayStr,
               );
 
               hasChanges = true;
@@ -511,14 +237,14 @@ export default function App() {
                   ...tb,
                   status: 'preserved',
                   preservedFor: `${todayPendingRes.customerName} (${todayPendingRes.time})`,
-                  cleaningStartedAt: null
+                  cleaningStartedAt: null,
                 };
               }
               return {
                 ...tb,
                 status: 'available',
                 preservedFor: '',
-                cleaningStartedAt: null
+                cleaningStartedAt: null,
               };
             }
 
@@ -527,17 +253,23 @@ export default function App() {
           }
 
           // 4. 檢查今日是否有預約訂位
-          const todayPendingRes = reservations.find(r => 
-            String(r.tableNumber).trim() === tblId &&
-            (r.status === 'pending' || r.status === 'upcoming' || r.status === 'confirmed') &&
-            r.date.trim() === todayStr
+          const todayPendingRes = reservations.find(
+            (r) =>
+              String(r.tableNumber).trim() === tblId &&
+              (r.status === 'pending' || r.status === 'upcoming' || r.status === 'confirmed') &&
+              r.date.trim() === todayStr,
           );
 
           if (todayPendingRes) {
             const presText = `${todayPendingRes.customerName} (${todayPendingRes.time})`;
             if (tb.status !== 'preserved' || tb.preservedFor !== presText) {
               hasChanges = true;
-              return { ...tb, status: 'preserved', preservedFor: presText, cleaningStartedAt: null };
+              return {
+                ...tb,
+                status: 'preserved',
+                preservedFor: presText,
+                cleaningStartedAt: null,
+              };
             }
           } else if (tb.status === 'preserved') {
             hasChanges = true;
@@ -567,16 +299,28 @@ export default function App() {
     reservationDate?: string;
     reservationTime?: string;
   }) => {
-    const clientOrderId = orderData.clientOrderId || `client_ord_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
-    
+    const clientOrderId =
+      orderData.clientOrderId ||
+      `client_ord_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
+
     if (activeOrderSubmissionsRef.current.has(clientOrderId)) {
-      console.log(`[Sabay App] Already submitting order with clientOrderId: ${clientOrderId}. Blocking duplicate call.`);
+      console.log(
+        `[Sabay App] Already submitting order with clientOrderId: ${clientOrderId}. Blocking duplicate call.`,
+      );
       return null;
     }
     activeOrderSubmissionsRef.current.add(clientOrderId);
 
-    if (orderData.tableNumber && orderData.tableNumber !== '外帶' && orderData.tableNumber !== 'takeout') {
-      handleUpdateTableStatus(orderData.tableNumber, { status: 'in_use', preservedFor: '', cleaningStartedAt: null });
+    if (
+      orderData.tableNumber &&
+      orderData.tableNumber !== '外帶' &&
+      orderData.tableNumber !== 'takeout'
+    ) {
+      handleUpdateTableStatus(orderData.tableNumber, {
+        status: 'in_use',
+        preservedFor: '',
+        cleaningStartedAt: null,
+      });
     }
 
     const orderPayload = {
@@ -602,7 +346,7 @@ export default function App() {
     if (!navigator.onLine) {
       console.log('[Sabay Offline] Intercepting order submission offline...');
       addRequestToQueue('/api/orders', 'POST', orderPayload, description);
-      
+
       const completedOrder: Order = {
         id: tempId,
         tableNumber: orderData.tableNumber,
@@ -657,7 +401,7 @@ export default function App() {
     } catch (err) {
       console.warn('[Sabay Ordering failed, falling back to cache queue]', err);
       addRequestToQueue('/api/orders', 'POST', orderPayload, description);
-      
+
       const completedOrder: Order = {
         id: tempId,
         tableNumber: orderData.tableNumber,
@@ -688,12 +432,14 @@ export default function App() {
   // 2. Kitchen Status Updater
   const handleUpdateOrderStatus = async (orderId: string, status: OrderStatus) => {
     const description = `更新 🥢 訂單 #${orderId.replace('offline_temp_', '離線')} 狀態至「${status}」`;
-    
+
     // Check if offline
     if (!navigator.onLine || orderId.startsWith('offline_temp_')) {
       console.log('[Sabay Offline] Intercepting state change offline...');
       addRequestToQueue(`/api/orders/${orderId}/status`, 'PUT', { status }, description);
-      setOrders(prev => prev.map(o => o.id === orderId ? { ...o, status, isOfflinePending: true } : o));
+      setOrders((prev) =>
+        prev.map((o) => (o.id === orderId ? { ...o, status, isOfflinePending: true } : o)),
+      );
       return;
     }
 
@@ -707,39 +453,65 @@ export default function App() {
         await fetchData();
       } else {
         addRequestToQueue(`/api/orders/${orderId}/status`, 'PUT', { status }, description);
-        setOrders(prev => prev.map(o => o.id === orderId ? { ...o, status, isOfflinePending: true } : o));
+        setOrders((prev) =>
+          prev.map((o) => (o.id === orderId ? { ...o, status, isOfflinePending: true } : o)),
+        );
       }
     } catch (err) {
       console.warn('[Offline Fallback] Update Order Status failed, queued:', err);
       addRequestToQueue(`/api/orders/${orderId}/status`, 'PUT', { status }, description);
-      setOrders(prev => prev.map(o => o.id === orderId ? { ...o, status, isOfflinePending: true } : o));
+      setOrders((prev) =>
+        prev.map((o) => (o.id === orderId ? { ...o, status, isOfflinePending: true } : o)),
+      );
     }
   };
 
   // 2.2.5 Toggle Single Order Item Complete / Prepared
-  const handleToggleOrderItemComplete = async (orderId: string, itemId: string, isCompleted: boolean, isPrepared?: boolean) => {
+  const handleToggleOrderItemComplete = async (
+    orderId: string,
+    itemId: string,
+    isCompleted: boolean,
+    isPrepared?: boolean,
+  ) => {
     const description = `更新 🥢 訂單 #${orderId.replace('offline_temp_', '離線')} 內單一商品狀態`;
-    
+
     // Optimistically update local orders state
-    setOrders(prev => prev.map(o => {
-      if (o.id === orderId) {
-        const updatedItems = o.items.map(it => {
-          if (it.id === itemId) {
-            const prep = typeof isPrepared !== 'undefined' ? isPrepared : (isCompleted ? true : (it.isPrepared || false));
-            return { ...it, isCompleted, isPrepared: prep };
-          }
-          return it;
-        });
-        const allCompleted = updatedItems.every(item => item.isCompleted);
-        // Don't auto-complete paid orders — kitchen must explicitly press 出餐完成
-        const status = allCompleted && o.status !== 'paid' ? 'completed' : (o.status === 'completed' ? 'preparing' : o.status);
-        return { ...o, items: updatedItems, status };
-      }
-      return o;
-    }));
+    setOrders((prev) =>
+      prev.map((o) => {
+        if (o.id === orderId) {
+          const updatedItems = o.items.map((it) => {
+            if (it.id === itemId) {
+              const prep =
+                typeof isPrepared !== 'undefined'
+                  ? isPrepared
+                  : isCompleted
+                    ? true
+                    : it.isPrepared || false;
+              return { ...it, isCompleted, isPrepared: prep };
+            }
+            return it;
+          });
+          const allCompleted = updatedItems.every((item) => item.isCompleted);
+          // Don't auto-complete paid orders — kitchen must explicitly press 出餐完成
+          const status =
+            allCompleted && o.status !== 'paid'
+              ? 'completed'
+              : o.status === 'completed'
+                ? 'preparing'
+                : o.status;
+          return { ...o, items: updatedItems, status };
+        }
+        return o;
+      }),
+    );
 
     if (!navigator.onLine || orderId.startsWith('offline_temp_')) {
-      addRequestToQueue(`/api/orders/${orderId}/items/${itemId}/complete`, 'PUT', { isCompleted, isPrepared }, description);
+      addRequestToQueue(
+        `/api/orders/${orderId}/items/${itemId}/complete`,
+        'PUT',
+        { isCompleted, isPrepared },
+        description,
+      );
       return;
     }
 
@@ -751,21 +523,33 @@ export default function App() {
       });
       if (res.ok) {
         const updatedOrder = await res.json();
-        setOrders(prev => prev.map(o => o.id === orderId ? updatedOrder : o));
+        setOrders((prev) => prev.map((o) => (o.id === orderId ? updatedOrder : o)));
       } else {
-        addRequestToQueue(`/api/orders/${orderId}/items/${itemId}/complete`, 'PUT', { isCompleted, isPrepared }, description);
+        addRequestToQueue(
+          `/api/orders/${orderId}/items/${itemId}/complete`,
+          'PUT',
+          { isCompleted, isPrepared },
+          description,
+        );
       }
     } catch (err) {
       console.warn('[Offline Fallback] Toggle order item state failed, queued:', err);
-      addRequestToQueue(`/api/orders/${orderId}/items/${itemId}/complete`, 'PUT', { isCompleted, isPrepared }, description);
+      addRequestToQueue(
+        `/api/orders/${orderId}/items/${itemId}/complete`,
+        'PUT',
+        { isCompleted, isPrepared },
+        description,
+      );
     }
   };
 
   // 2.3 Order Table Number / Takeout Modifier (Admin/Cashier View Override)
   const handleUpdateTableNumber = async (orderId: string, tableNumber: string) => {
     const description = `修改 🥢 訂單 #${orderId.replace('offline_temp_', '離線')} 的桌號至 ${tableNumber} 桌`;
-    setOrders(prev => prev.map(o => o.id === orderId ? { ...o, tableNumber, isOfflinePending: true } : o));
-    
+    setOrders((prev) =>
+      prev.map((o) => (o.id === orderId ? { ...o, tableNumber, isOfflinePending: true } : o)),
+    );
+
     if (!navigator.onLine || orderId.startsWith('offline_temp_')) {
       addRequestToQueue(`/api/orders/${orderId}/table-number`, 'PUT', { tableNumber }, description);
       return { success: true };
@@ -793,7 +577,9 @@ export default function App() {
   // 2.3.5 Order Quick Notes Updater (Speech / Audio Text input on KDS)
   const handleUpdateQuickNotes = async (orderId: string, quickNotes: string) => {
     const description = `更新 🥢 訂單 #${orderId.replace('offline_temp_', '離線')} 備註: "${quickNotes}"`;
-    setOrders(prev => prev.map(o => o.id === orderId ? { ...o, quickNotes, isOfflinePending: true } : o));
+    setOrders((prev) =>
+      prev.map((o) => (o.id === orderId ? { ...o, quickNotes, isOfflinePending: true } : o)),
+    );
 
     if (!navigator.onLine || orderId.startsWith('offline_temp_')) {
       addRequestToQueue(`/api/orders/${orderId}/quick-notes`, 'PUT', { quickNotes }, description);
@@ -822,10 +608,19 @@ export default function App() {
   // 2.3.6 Toggle Attention Flag status & update flagged custom reason on order
   const handleToggleOrderFlag = async (orderId: string, isFlagged: boolean, flagReason: string) => {
     const description = `設定 🥢 訂單 #${orderId.replace('offline_temp_', '離線')} 關注旗幟 ${isFlagged ? 'ON' : 'OFF'}`;
-    setOrders(prev => prev.map(o => o.id === orderId ? { ...o, isFlagged, flagReason, isOfflinePending: true } : o));
+    setOrders((prev) =>
+      prev.map((o) =>
+        o.id === orderId ? { ...o, isFlagged, flagReason, isOfflinePending: true } : o,
+      ),
+    );
 
     if (!navigator.onLine || orderId.startsWith('offline_temp_')) {
-      addRequestToQueue(`/api/orders/${orderId}/flag`, 'PUT', { isFlagged, flagReason }, description);
+      addRequestToQueue(
+        `/api/orders/${orderId}/flag`,
+        'PUT',
+        { isFlagged, flagReason },
+        description,
+      );
       return { success: true };
     }
 
@@ -839,11 +634,21 @@ export default function App() {
         await fetchData();
         return { success: true };
       }
-      addRequestToQueue(`/api/orders/${orderId}/flag`, 'PUT', { isFlagged, flagReason }, description);
+      addRequestToQueue(
+        `/api/orders/${orderId}/flag`,
+        'PUT',
+        { isFlagged, flagReason },
+        description,
+      );
       return { success: true };
     } catch (err: any) {
       console.warn('[Offline Fallback] Toggle order flag failed, queued:', err);
-      addRequestToQueue(`/api/orders/${orderId}/flag`, 'PUT', { isFlagged, flagReason }, description);
+      addRequestToQueue(
+        `/api/orders/${orderId}/flag`,
+        'PUT',
+        { isFlagged, flagReason },
+        description,
+      );
       return { success: true };
     }
   };
@@ -851,8 +656,17 @@ export default function App() {
   // 2.4 Update Order Items list (add / remove qty inside order items)
   const handleUpdateOrderItems = async (orderId: string, items: any[], refundLogs?: any[]) => {
     const description = `調整 🥢 訂單 #${orderId.replace('offline_temp_', '離線')} 品項數量`;
-    const totalAmount = items.reduce((sum, item) => sum + (item.price * (item.qty || item.quantity || 0)), 0);
-    setOrders(prev => prev.map(o => o.id === orderId ? { ...o, items, subtotal: totalAmount, total: totalAmount, isOfflinePending: true } : o));
+    const totalAmount = items.reduce(
+      (sum, item) => sum + item.price * (item.qty || item.quantity || 0),
+      0,
+    );
+    setOrders((prev) =>
+      prev.map((o) =>
+        o.id === orderId
+          ? { ...o, items, subtotal: totalAmount, total: totalAmount, isOfflinePending: true }
+          : o,
+      ),
+    );
 
     if (!navigator.onLine || orderId.startsWith('offline_temp_')) {
       addRequestToQueue(`/api/orders/${orderId}/items`, 'PUT', { items, refundLogs }, description);
@@ -868,7 +682,12 @@ export default function App() {
       if (res.ok) {
         await fetchData();
       } else {
-        addRequestToQueue(`/api/orders/${orderId}/items`, 'PUT', { items, refundLogs }, description);
+        addRequestToQueue(
+          `/api/orders/${orderId}/items`,
+          'PUT',
+          { items, refundLogs },
+          description,
+        );
       }
     } catch (err) {
       console.warn('[Offline Fallback] Update order items failed, queued:', err);
@@ -887,36 +706,60 @@ export default function App() {
       discount?: number;
       isPaid?: boolean;
     },
-    skipRefresh?: boolean
+    skipRefresh?: boolean,
   ) => {
     const description = `結帳 🥢 訂單 #${orderId.replace('offline_temp_', '離線')} 完成付款`;
-    setOrders(prev => prev.map(o => o.id === orderId ? { ...o, isPaid: true, status: 'paid' as OrderStatus, isOfflinePending: true } : o));
+    setOrders((prev) =>
+      prev.map((o) =>
+        o.id === orderId
+          ? { ...o, isPaid: true, status: 'paid' as OrderStatus, isOfflinePending: true }
+          : o,
+      ),
+    );
 
     // 🔒 結帳完成後一併刪除相對應的「預約訂位點餐專屬通道」
-    const targetOrder = orders.find(o => o.id === orderId);
+    const targetOrder = orders.find((o) => o.id === orderId);
     if (targetOrder) {
-      if (targetOrder.tableNumber && targetOrder.tableNumber !== '外帶' && targetOrder.tableNumber !== 'takeout') {
-        const remainingUnpaid = orders.filter(o => o.tableNumber === targetOrder.tableNumber && o.id !== orderId && !o.isPaid && o.status !== 'cancelled');
+      if (
+        targetOrder.tableNumber &&
+        targetOrder.tableNumber !== '外帶' &&
+        targetOrder.tableNumber !== 'takeout'
+      ) {
+        const remainingUnpaid = orders.filter(
+          (o) =>
+            o.tableNumber === targetOrder.tableNumber &&
+            o.id !== orderId &&
+            !o.isPaid &&
+            o.status !== 'cancelled',
+        );
         if (remainingUnpaid.length === 0) {
           handleUpdateTableStatus(targetOrder.tableNumber, {
             status: 'cleaning',
-            cleaningStartedAt: new Date().toISOString()
+            cleaningStartedAt: new Date().toISOString(),
           });
         }
       }
       const resNo = targetOrder.reservationNo;
-      const matchingRes = (reservations || []).find(r =>
-        (resNo && (r.id === resNo || (r as any).reservationNo === resNo)) ||
-        (r.tableNumber === targetOrder.tableNumber && r.date === targetOrder.reservationDate)
+      const matchingRes = (reservations || []).find(
+        (r) =>
+          (resNo && (r.id === resNo || (r as any).reservationNo === resNo)) ||
+          (r.tableNumber === targetOrder.tableNumber && r.date === targetOrder.reservationDate),
       );
       if (matchingRes) {
-        console.log(`[Checkout Cleanup] Deleting reservation ${matchingRes.id} associated with paid order ${orderId}`);
+        console.log(
+          `[Checkout Cleanup] Deleting reservation ${matchingRes.id} associated with paid order ${orderId}`,
+        );
         handleDeleteReservation(matchingRes.id);
       }
     }
 
     if (!navigator.onLine || orderId.startsWith('offline_temp_')) {
-      addRequestToQueue(`/api/orders/${orderId}/checkout`, 'PUT', checkoutData || { isPaid: true }, description);
+      addRequestToQueue(
+        `/api/orders/${orderId}/checkout`,
+        'PUT',
+        checkoutData || { isPaid: true },
+        description,
+      );
       return;
     }
 
@@ -931,18 +774,28 @@ export default function App() {
           await fetchData();
         }
       } else {
-        addRequestToQueue(`/api/orders/${orderId}/checkout`, 'PUT', checkoutData || { isPaid: true }, description);
+        addRequestToQueue(
+          `/api/orders/${orderId}/checkout`,
+          'PUT',
+          checkoutData || { isPaid: true },
+          description,
+        );
       }
     } catch (err) {
       console.warn('[Offline Fallback] Pay order failed, queued:', err);
-      addRequestToQueue(`/api/orders/${orderId}/checkout`, 'PUT', checkoutData || { isPaid: true }, description);
+      addRequestToQueue(
+        `/api/orders/${orderId}/checkout`,
+        'PUT',
+        checkoutData || { isPaid: true },
+        description,
+      );
     }
   };
 
   // 2.4.5 Delete Order
   const handleDeleteOrder = async (orderId: string) => {
     const description = `刪除 🥢 訂單 #${orderId.replace('offline_temp_', '離線')}`;
-    setOrders(prev => prev.filter(o => o.id !== orderId));
+    setOrders((prev) => prev.filter((o) => o.id !== orderId));
 
     if (!navigator.onLine || orderId.startsWith('offline_temp_')) {
       addRequestToQueue(`/api/orders/${orderId}`, 'DELETE', {}, description);
@@ -982,7 +835,13 @@ export default function App() {
     }
   };
 
-  const handleAddIngredient = async (id: string, name: { zh: string; en?: string }, stock: number, minThreshold: number, unit: string) => {
+  const handleAddIngredient = async (
+    id: string,
+    name: { zh: string; en?: string },
+    stock: number,
+    minThreshold: number,
+    unit: string,
+  ) => {
     try {
       const res = await apiFetch('/api/ingredients', {
         method: 'POST',
@@ -1020,7 +879,7 @@ export default function App() {
     lastMenuReorderTimeRef.current = Date.now() + 15000;
 
     // Optimistic UI state update so button toggles instantly
-    setMenuItems(prev => prev.map(m => m.id === id ? { ...m, available: !m.available } : m));
+    setMenuItems((prev) => prev.map((m) => (m.id === id ? { ...m, available: !m.available } : m)));
 
     try {
       const res = await apiFetch('/api/menu/toggle-available', {
@@ -1031,26 +890,43 @@ export default function App() {
       if (res.ok) {
         const data = await res.json();
         if (data && data.item) {
-          setMenuItems(prev => prev.map(m => m.id === id ? { ...m, available: data.item.available } : m));
+          setMenuItems((prev) =>
+            prev.map((m) => (m.id === id ? { ...m, available: data.item.available } : m)),
+          );
         }
       } else {
         // Revert on HTTP failure
-        setMenuItems(prev => prev.map(m => m.id === id ? { ...m, available: !m.available } : m));
+        setMenuItems((prev) =>
+          prev.map((m) => (m.id === id ? { ...m, available: !m.available } : m)),
+        );
       }
       await fetchData(true, false);
     } catch (err) {
       console.error('[Sabay Menu lock toggle error]', err);
       // Revert on exception
-      setMenuItems(prev => prev.map(m => m.id === id ? { ...m, available: !m.available } : m));
+      setMenuItems((prev) =>
+        prev.map((m) => (m.id === id ? { ...m, available: !m.available } : m)),
+      );
     }
   };
 
   // 5.5 Adjust ingredient stock count manually
-  const handleAdjustIngredientStock = async (ingredientId: string, quantityChanged: number, note: string) => {
+  const handleAdjustIngredientStock = async (
+    ingredientId: string,
+    quantityChanged: number,
+    note: string,
+  ) => {
     const description = `調整原料庫存 ID:${ingredientId} (${quantityChanged > 0 ? '+' : ''}${quantityChanged})`;
     if (!navigator.onLine) {
-      addRequestToQueue('/api/inventory/adjust', 'POST', { ingredientId, quantityChanged, note }, description);
-      setIngredients(prev => prev.map(i => i.id === ingredientId ? { ...i, stock: i.stock + quantityChanged } : i));
+      addRequestToQueue(
+        '/api/inventory/adjust',
+        'POST',
+        { ingredientId, quantityChanged, note },
+        description,
+      );
+      setIngredients((prev) =>
+        prev.map((i) => (i.id === ingredientId ? { ...i, stock: i.stock + quantityChanged } : i)),
+      );
       return;
     }
     try {
@@ -1061,7 +937,12 @@ export default function App() {
       });
       await fetchData();
     } catch (err) {
-      addRequestToQueue('/api/inventory/adjust', 'POST', { ingredientId, quantityChanged, note }, description);
+      addRequestToQueue(
+        '/api/inventory/adjust',
+        'POST',
+        { ingredientId, quantityChanged, note },
+        description,
+      );
     }
   };
 
@@ -1190,7 +1071,7 @@ export default function App() {
     lastCategoryReorderTimeRef.current = Date.now() + 15000;
     // Optimistic UI state update to prevent consecutive-click race conditions and latency lag
     const mappedCategories = order
-      .map(id => categories.find(c => c.id === id))
+      .map((id) => categories.find((c) => c.id === id))
       .filter((c): c is Category => !!c);
     setCategories(mappedCategories);
 
@@ -1217,7 +1098,7 @@ export default function App() {
     lastMenuReorderTimeRef.current = Date.now() + 15000;
     // Optimistic UI state update to prevent consecutive-click race conditions and latency lag
     const mappedItems = order
-      .map(id => menuItems.find(m => m.id === id))
+      .map((id) => menuItems.find((m) => m.id === id))
       .filter((m): m is any => !!m);
     setMenuItems(mappedItems);
 
@@ -1314,9 +1195,14 @@ export default function App() {
     }
   };
 
-  const handleUpdateTableStatus = async (id: string, updates: Partial<Omit<TableConfig, 'id' | 'qrCodeUrl'>>) => {
+  const handleUpdateTableStatus = async (
+    id: string,
+    updates: Partial<Omit<TableConfig, 'id' | 'qrCodeUrl'>>,
+  ) => {
     const description = `變更 🥢 ${id} 桌狀態 -> ${updates.status || '設定項目'}`;
-    setTables(prev => prev.map(t => t.id === id ? { ...t, ...updates, isOfflinePending: true } : t));
+    setTables((prev) =>
+      prev.map((t) => (t.id === id ? { ...t, ...updates, isOfflinePending: true } : t)),
+    );
 
     if (!navigator.onLine) {
       addRequestToQueue(`/api/tables/${encodeURIComponent(id)}`, 'PUT', updates, description);
@@ -1356,7 +1242,7 @@ export default function App() {
     if (reservation.date && reservation.date.trim() > maxThreeMonthsDateStr) {
       return {
         success: false,
-        error: `預約日期最多只能提前 3 個月 (最晚至 ${maxThreeMonthsDateStr})！`
+        error: `預約日期最多只能提前 3 個月 (最晚至 ${maxThreeMonthsDateStr})！`,
       };
     }
 
@@ -1371,7 +1257,7 @@ export default function App() {
     const targetTableStr = String(reservation.tableNumber).trim();
     const targetDateStr = String(reservation.date).trim();
 
-    const conflict = (reservations || []).find(r => {
+    const conflict = (reservations || []).find((r) => {
       if (r.status === 'cancelled') return false;
       if (String(r.date).trim() !== targetDateStr) return false;
       if (String(r.tableNumber).trim() !== targetTableStr) return false;
@@ -1382,7 +1268,7 @@ export default function App() {
     if (conflict) {
       return {
         success: false,
-        error: `預約時段衝突：【${reservation.tableNumber} 桌】在 ${reservation.date} ${reservation.time} 前後 3 小時內已有預約 (${conflict.time} ${conflict.customerName})，該時段無法重複預約。`
+        error: `預約時段衝突：【${reservation.tableNumber} 桌】在 ${reservation.date} ${reservation.time} 前後 3 小時內已有預約 (${conflict.time} ${conflict.customerName})，該時段無法重複預約。`,
       };
     }
 
@@ -1407,7 +1293,7 @@ export default function App() {
 
   const handleUpdateReservation = async (id: string, updates: Partial<Reservation>) => {
     if (updates.date || updates.time || updates.tableNumber) {
-      const current = (reservations || []).find(r => r.id === id);
+      const current = (reservations || []).find((r) => r.id === id);
       const targetDate = (updates.date || current?.date || '').trim();
       const targetTime = (updates.time || current?.time || '').trim();
       const targetTable = String(updates.tableNumber || current?.tableNumber || '').trim();
@@ -1420,7 +1306,7 @@ export default function App() {
           return (h || 0) * 60 + (m || 0);
         };
         const targetMins = parseMins(targetTime);
-        const conflict = (reservations || []).find(r => {
+        const conflict = (reservations || []).find((r) => {
           if (r.id === id) return false;
           if (r.status === 'cancelled') return false;
           if (String(r.date).trim() !== targetDate) return false;
@@ -1432,7 +1318,7 @@ export default function App() {
         if (conflict) {
           return {
             success: false,
-            error: `預約時段衝突：【${targetTable} 桌】在 ${targetDate} ${targetTime} 前後 3 小時內已有預約 (${conflict.time} ${conflict.customerName})，該時段無法重複預約。`
+            error: `預約時段衝突：【${targetTable} 桌】在 ${targetDate} ${targetTime} 前後 3 小時內已有預約 (${conflict.time} ${conflict.customerName})，該時段無法重複預約。`,
           };
         }
       }
@@ -1462,7 +1348,7 @@ export default function App() {
     if (!reservations || reservations.length === 0) return;
     const checkUpcomingInterval = setInterval(() => {
       const now = new Date();
-      reservations.forEach(res => {
+      reservations.forEach((res) => {
         if (res.status === 'pending') {
           const [year, month, day] = res.date.split('-').map(Number);
           const [hour, minute] = res.time.split(':').map(Number);
@@ -1470,7 +1356,9 @@ export default function App() {
             const resDateTime = new Date(year, month - 1, day, hour, minute);
             const diffMinutes = (resDateTime.getTime() - now.getTime()) / (1000 * 60);
             if (diffMinutes > -120 && diffMinutes <= 60) {
-              console.log(`[Client Auto-Check] Reservation ${res.id} (${res.customerName}) is within 1 hour, marking as upcoming.`);
+              console.log(
+                `[Client Auto-Check] Reservation ${res.id} (${res.customerName}) is within 1 hour, marking as upcoming.`,
+              );
               handleUpdateReservation(res.id, { status: 'upcoming' });
             }
           }
@@ -1503,7 +1391,7 @@ export default function App() {
       const res = await apiFetch('/api/promo-combo', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(newConfig)
+        body: JSON.stringify(newConfig),
       });
       if (res.ok) {
         const data = await res.json();
@@ -1642,13 +1530,17 @@ export default function App() {
       }
 
       // If running on hosted environment, attempt local PC bridge relay if active
-      if (typeof window !== 'undefined' && window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1') {
+      if (
+        typeof window !== 'undefined' &&
+        window.location.hostname !== 'localhost' &&
+        window.location.hostname !== '127.0.0.1'
+      ) {
         try {
           await fetch('http://localhost:3000/api/printer/test', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ target: targetVal }),
-            signal: AbortSignal.timeout(1000)
+            signal: AbortSignal.timeout(1000),
           }).catch(() => {});
         } catch (e) {
           // Local bridge offline
@@ -1658,11 +1550,15 @@ export default function App() {
       if (data && data.success) {
         await fetchData();
 
-        // Note: Real physical ESC/POS thermal receipt print was handled directly by server 
-        // (via IP TCP Socket or LPT parallel port). 
-        // Browser window.print() is intentionally disabled for direct hardware dispatch 
+        // Note: Real physical ESC/POS thermal receipt print was handled directly by server
+        // (via IP TCP Socket or LPT parallel port).
+        // Browser window.print() is intentionally disabled for direct hardware dispatch
         // to prevent OS system default printer hijacking.
-        return { success: true, message: data.message, tcpLog: data.hardwareLogs?.kitchen || data.hardwareLogs?.bill };
+        return {
+          success: true,
+          message: data.message,
+          tcpLog: data.hardwareLogs?.kitchen || data.hardwareLogs?.bill,
+        };
       } else {
         const text = res ? await res.text() : '';
         let errorMsg = '列印測試頁失敗';
@@ -1685,7 +1581,6 @@ export default function App() {
     setPushNotifications(pushNotifications.filter((n) => n.id !== notifId));
   };
 
-
   return (
     <div className="min-h-screen bg-[#0F0F0F] text-white flex flex-col font-sans">
       {/* 1. COMPREHENSIVE NAVBAR */}
@@ -1700,16 +1595,16 @@ export default function App() {
               <div className="min-w-0">
                 <h1 className="text-[10px] min-[360px]:text-[11px] min-[395px]:text-xs sm:text-sm md:text-base font-bold sm:tracking-widest font-serif flex items-center text-[#E5B453]">
                   <span className="block whitespace-normal break-words leading-tight max-w-[120px] min-[360px]:max-w-[150px] min-[395px]:max-w-[180px] sm:max-w-none">
-                    {isAtStaffPath 
-                      ? '沙貝泰式燒烤 經營管理中心' 
-                      : (lang === 'zh' 
-                          ? '沙貝燒烤'
-                          : TRANSLATIONS.sabayBBQ[lang])}
+                    {isAtStaffPath
+                      ? '沙貝泰式燒烤 經營管理中心'
+                      : lang === 'zh'
+                        ? '沙貝燒烤'
+                        : TRANSLATIONS.sabayBBQ[lang]}
                   </span>
                 </h1>
                 <span className="text-[10px] text-white/50 hidden sm:block font-sans tracking-wide truncate">
-                  {isAtStaffPath 
-                    ? '🛡️ 員工專屬隔離安全驗證終端 (Autonomous Admin Terminal)' 
+                  {isAtStaffPath
+                    ? '🛡️ 員工專屬隔離安全驗證終端 (Autonomous Admin Terminal)'
                     : '桃園市大園區高鐵北路二段198號1樓 · 電話: 0966626408'}
                 </span>
               </div>
@@ -1719,7 +1614,10 @@ export default function App() {
             <div className="hidden lg:flex items-center space-x-2">
               {isAtStaffPath ? (
                 isStaff ? (
-                  <div className="flex bg-white/5 p-1 rounded-2xl border border-white/10 space-x-1 overflow-x-hidden shrink-0" id="desktop-tab-selector">
+                  <div
+                    className="flex bg-white/5 p-1 rounded-2xl border border-white/10 space-x-1 overflow-x-hidden shrink-0"
+                    id="desktop-tab-selector"
+                  >
                     <button
                       id="tab-btn-cashier-main"
                       onClick={() => {
@@ -1733,7 +1631,12 @@ export default function App() {
                       }`}
                     >
                       <Coins size={14} />
-                      <span className="whitespace-nowrap">🛎️ 櫃檯收銀台 <kbd className="ml-1 bg-black/30 text-[10px] px-1 py-0.5 rounded border border-white/10">Ctrl+1</kbd></span>
+                      <span className="whitespace-nowrap">
+                        🛎️ 櫃檯收銀台{' '}
+                        <kbd className="ml-1 bg-black/30 text-[10px] px-1 py-0.5 rounded border border-white/10">
+                          Ctrl+1
+                        </kbd>
+                      </span>
                     </button>
 
                     <button
@@ -1749,7 +1652,12 @@ export default function App() {
                       }`}
                     >
                       <ChefHat size={14} />
-                      <span className="whitespace-nowrap">🍳 廚房監控 (KDS) <kbd className="ml-1 bg-black/30 text-[10px] px-1 py-0.5 rounded border border-white/10">Ctrl+2</kbd></span>
+                      <span className="whitespace-nowrap">
+                        🍳 廚房監控 (KDS){' '}
+                        <kbd className="ml-1 bg-black/30 text-[10px] px-1 py-0.5 rounded border border-white/10">
+                          Ctrl+2
+                        </kbd>
+                      </span>
                     </button>
 
                     <button
@@ -1765,7 +1673,12 @@ export default function App() {
                       }`}
                     >
                       <BarChart3 size={14} />
-                      <span className="whitespace-nowrap">📊 經營分析與上架 <kbd className="ml-1 bg-black/30 text-[10px] px-1 py-0.5 rounded border border-white/10">Ctrl+3</kbd></span>
+                      <span className="whitespace-nowrap">
+                        📊 經營分析與上架{' '}
+                        <kbd className="ml-1 bg-black/30 text-[10px] px-1 py-0.5 rounded border border-white/10">
+                          Ctrl+3
+                        </kbd>
+                      </span>
                     </button>
 
                     <button
@@ -1774,7 +1687,12 @@ export default function App() {
                       className="flex items-center space-x-1.5 px-4 py-2 text-white/50 hover:text-white hover:bg-white/5 rounded-xl cursor-pointer transition text-xs font-black whitespace-nowrap"
                     >
                       <Smartphone size={14} />
-                      <span className="whitespace-nowrap">📱 返回顧客點餐 <kbd className="ml-1 bg-black/30 text-[10px] px-1 py-0.5 rounded border border-white/10">Ctrl+4</kbd></span>
+                      <span className="whitespace-nowrap">
+                        📱 返回顧客點餐{' '}
+                        <kbd className="ml-1 bg-black/30 text-[10px] px-1 py-0.5 rounded border border-white/10">
+                          Ctrl+4
+                        </kbd>
+                      </span>
                     </button>
 
                     <button
@@ -1790,7 +1708,12 @@ export default function App() {
                       }`}
                     >
                       <span className="text-sm select-none">🏁</span>
-                      <span className="whitespace-nowrap">每日關帳結算 <kbd className="ml-1 bg-black/30 text-[10px] px-1 py-0.5 rounded border border-amber-500/30">Ctrl+5</kbd></span>
+                      <span className="whitespace-nowrap">
+                        每日關帳結算{' '}
+                        <kbd className="ml-1 bg-black/30 text-[10px] px-1 py-0.5 rounded border border-amber-500/30">
+                          Ctrl+5
+                        </kbd>
+                      </span>
                     </button>
 
                     <button
@@ -1840,13 +1763,16 @@ export default function App() {
 
       {/* Interactive Collapsible Contact Banner (Middle Area between First Column/Navbar and Second Column/Workspace) */}
       {!isAtStaffPath && (
-        <div className="bg-[#121212] border-b border-white/5 py-1.5 px-4" id="contact-info-reveal-bar">
+        <div
+          className="bg-[#121212] border-b border-white/5 py-1.5 px-4"
+          id="contact-info-reveal-bar"
+        >
           <div className="max-w-7xl mx-auto flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2.5">
             <div className="flex items-center space-x-2 text-white/35 text-[11px] font-sans font-medium">
               <span className="w-1.5 h-1.5 rounded-full bg-[#E5B453]/80 animate-pulse" />
               <span>沙貝餐飲聯盟店鋪資訊 Branch & Contact</span>
             </div>
-            
+
             <div className="flex items-center justify-between sm:justify-end gap-3 flex-1">
               <div className="min-h-6 flex items-center">
                 {showContactDetails ? (
@@ -1857,7 +1783,9 @@ export default function App() {
                     </span>
                     <span className="flex items-center space-x-1">
                       <MapPin size={12} className="text-[#E5B453]" />
-                      <span className="font-sans text-[11px] text-white/85">桃園市大園區高鐵北路二段198號1樓</span>
+                      <span className="font-sans text-[11px] text-white/85">
+                        桃園市大園區高鐵北路二段198號1樓
+                      </span>
                     </span>
                   </div>
                 ) : (
@@ -1892,7 +1820,10 @@ export default function App() {
 
       {/* Mobile Sticky Tab selectors, only shown to logged-in staff on staff login path */}
       {isAtStaffPath && isStaff && (
-        <div className="lg:hidden bg-[#121212] border-b border-white/10 p-2 flex justify-around sticky top-18 z-30 shadow-md" id="mobile-tab-selector">
+        <div
+          className="lg:hidden bg-[#121212] border-b border-white/10 p-2 flex justify-around sticky top-18 z-30 shadow-md"
+          id="mobile-tab-selector"
+        >
           <button
             id="m-tab-btn-terminal"
             onClick={() => {
@@ -1900,7 +1831,9 @@ export default function App() {
               setAdminSubTab('terminal');
             }}
             className={`flex-1 py-1.5 text-center text-[10px] font-bold transition flex flex-col items-center gap-1 cursor-pointer ${
-              activeTab === 'admin' && adminSubTab === 'terminal' ? 'text-[#E5B453]' : 'text-white/40'
+              activeTab === 'admin' && adminSubTab === 'terminal'
+                ? 'text-[#E5B453]'
+                : 'text-white/40'
             }`}
           >
             <Monitor size={15} />
@@ -1988,20 +1921,27 @@ export default function App() {
       <main className="flex-1 max-w-7xl w-full mx-auto p-4 sm:p-6 lg:p-8 relative">
         {/* Offline Sync HUD Panel */}
         {(!isNetworkOnline || offlineQueue.length > 0) && (
-          <div className="mb-6 rounded-2xl bg-zinc-950/90 border border-[#E5B453]/20 shadow-2xl p-4 md:p-5 flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-5 backdrop-blur-md" id="offline-sync-hud">
+          <div
+            className="mb-6 rounded-2xl bg-zinc-950/90 border border-[#E5B453]/20 shadow-2xl p-4 md:p-5 flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-5 backdrop-blur-md"
+            id="offline-sync-hud"
+          >
             {/* Connection State */}
             <div className="flex items-center space-x-3.5 shrink-0">
               <div className="relative">
-                <span className={`block h-4 w-4 rounded-full ${isNetworkOnline ? 'bg-emerald-500 animate-ping' : 'bg-rose-500 animate-pulse'}`} />
-                <span className={`absolute top-0 left-0 rounded-full h-4 w-4 ${isNetworkOnline ? 'bg-emerald-400' : 'bg-rose-400'}`} />
+                <span
+                  className={`block h-4 w-4 rounded-full ${isNetworkOnline ? 'bg-emerald-500 animate-ping' : 'bg-rose-500 animate-pulse'}`}
+                />
+                <span
+                  className={`absolute top-0 left-0 rounded-full h-4 w-4 ${isNetworkOnline ? 'bg-emerald-400' : 'bg-rose-400'}`}
+                />
               </div>
               <div>
                 <h4 className="text-sm font-sans font-bold text-white tracking-wide">
                   {isNetworkOnline ? '📡 網路連線已恢復 Online' : '📡 離線排隊保護中 Offline Mode'}
                 </h4>
                 <p className="text-xs text-white/40 mt-1">
-                  {isNetworkOnline 
-                    ? `已自動偵測在線 • 有 ${offlineQueue.length} 筆暫存待上傳` 
+                  {isNetworkOnline
+                    ? `已自動偵測在線 • 有 ${offlineQueue.length} 筆暫存待上傳`
                     : `無網路狀態下點餐或狀態調整將自動入庫 • ${offlineQueue.length} 筆待同步作業`}
                 </p>
               </div>
@@ -2016,9 +1956,14 @@ export default function App() {
                 </p>
                 <div className="space-y-1.5">
                   {offlineQueue.map((item) => (
-                    <div key={item.id} className="flex justify-between items-center bg-white/2 border border-white/5 py-1 px-2.5 rounded-lg text-xs hover:border-white/10 transition">
+                    <div
+                      key={item.id}
+                      className="flex justify-between items-center bg-white/2 border border-white/5 py-1 px-2.5 rounded-lg text-xs hover:border-white/10 transition"
+                    >
                       <span className="text-white/85 flex items-center gap-1.5 truncate">
-                        <span className="text-[10px] bg-[#E5B453]/10 text-[#E5B453] px-1 py-0.2 rounded font-mono font-bold">{item.method}</span>
+                        <span className="text-[10px] bg-[#E5B453]/10 text-[#E5B453] px-1 py-0.2 rounded font-mono font-bold">
+                          {item.method}
+                        </span>
                         <span className="truncate">{item.description}</span>
                       </span>
                       <span className="font-mono text-[10px] text-white/30 shrink-0 select-none">
@@ -2037,7 +1982,11 @@ export default function App() {
                   type="button"
                   id="btn-clear-offline-queue"
                   onClick={() => {
-                    if (window.confirm('確定要清除所有未同步的離線操作與點餐快取嗎？這會清除此視窗目前的未送出變更。')) {
+                    if (
+                      window.confirm(
+                        '確定要清除所有未同步的離線操作與點餐快取嗎？這會清除此視窗目前的未送出變更。',
+                      )
+                    ) {
                       clearOfflineQueue();
                     }
                   }}
@@ -2073,7 +2022,16 @@ export default function App() {
             <div className="w-10 h-10 border-4 border-[#E5B453] border-t-transparent rounded-full animate-spin"></div>
             <p className="text-white/50 font-bold text-sm">沙貝燒烤 雲端主機連線中...</p>
           </div>
-        ) : isAtStaffPath ? (
+        ) : (
+          <Suspense
+            fallback={
+              <div className="flex flex-col items-center justify-center py-24 space-y-4">
+                <div className="w-10 h-10 border-4 border-[#E5B453] border-t-transparent rounded-full animate-spin"></div>
+                <p className="text-white/50 font-bold text-sm">Loading Component Modules...</p>
+              </div>
+            }
+          >
+            {isAtStaffPath ? (
           !isStaff ? (
             <div className="py-8">
               <div className="max-w-md mx-auto text-center space-y-2 mb-6">
@@ -2081,7 +2039,9 @@ export default function App() {
                   <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse animate-duration-1000" />
                   🔒 ADMINISTRATIVE CONTROL PORTAL
                 </span>
-                <h2 className="text-2xl font-serif font-black text-white tracking-wide mt-2">沙貝管理後台獨立驗證門戶</h2>
+                <h2 className="text-2xl font-serif font-black text-white tracking-wide mt-2">
+                  沙貝管理後台獨立驗證門戶
+                </h2>
                 <p className="text-xs text-white/50 max-w-xs mx-auto">
                   本頁面為管理階層專屬之獨立防護選單。已與顧客共用選單安全防禦硬化，防止任何未授權之側錄、入侵或探測。
                 </p>
@@ -2215,6 +2175,8 @@ export default function App() {
             />
           </div>
         )}
+          </Suspense>
+        )}
       </main>
 
       {/* 3. Humble footer matching design constraints */}
@@ -2232,19 +2194,19 @@ export default function App() {
             </a>
           </span>
         </p>
-         {isAtStaffPath && (
-           <div className="flex items-center justify-center space-x-4 pt-1">
-             <button
-               type="button"
-               id="footer-customer-portal-link"
-               onClick={() => navigateTo('/')}
-               className="text-[#E5B453]/30 hover:text-[#E5B453] text-[9px] font-mono tracking-widest uppercase cursor-pointer transition py-0.5 px-1 rounded flex items-center space-x-1"
-             >
-               <Smartphone size={11} />
-               <span>Customer View</span>
-             </button>
-           </div>
-         )}
+        {isAtStaffPath && (
+          <div className="flex items-center justify-center space-x-4 pt-1">
+            <button
+              type="button"
+              id="footer-customer-portal-link"
+              onClick={() => navigateTo('/')}
+              className="text-[#E5B453]/30 hover:text-[#E5B453] text-[9px] font-mono tracking-widest uppercase cursor-pointer transition py-0.5 px-1 rounded flex items-center space-x-1"
+            >
+              <Smartphone size={11} />
+              <span>Customer View</span>
+            </button>
+          </div>
+        )}
         <div className="text-[9px] text-[#E5B453]/20 italic font-mono uppercase tracking-widest pt-1 flex items-center justify-center">
           <span>A.S.R. Cloud Engine v4.2 // Secured Connection Terminal</span>
           <button

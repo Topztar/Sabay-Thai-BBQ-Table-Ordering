@@ -57,94 +57,111 @@ const del = (routePath: string, handler: express.RequestHandler) => {
 
 // --- Google Cloud Storage Image Stream & Upload APIs ---
 // 1. Direct Image File Streaming via @google-cloud/storage
-app.get(['/api/images/:path(*)', '/images/:path(*)', '/api/images', '/images'], async (req, res) => {
-  const DEFAULT_FALLBACK_IMAGE = 'https://images.unsplash.com/photo-1544025162-d76694265947?auto=format&fit=crop&q=80&w=600';
+app.get(
+  ['/api/images/:path(*)', '/images/:path(*)', '/api/images', '/images'],
+  async (req, res) => {
+    const DEFAULT_FALLBACK_IMAGE =
+      'https://images.unsplash.com/photo-1544025162-d76694265947?auto=format&fit=crop&q=80&w=600';
 
-  try {
-    let rawPath = (req.params as any)?.path || (req.query.path as string) || (req.query.file as string) || (req.query.name as string) || '';
-    if (!rawPath && req.query.url) {
-      const urlStr = String(req.query.url);
-      if (urlStr.startsWith('gs://')) {
-        const parts = urlStr.replace('gs://', '').split('/');
-        parts.shift(); // remove bucket name
-        rawPath = parts.join('/');
-      } else if (urlStr.includes('firebasestorage.googleapis.com') || urlStr.includes('storage.googleapis.com')) {
-        const match = urlStr.match(/\/o\/([^?]+)/) || urlStr.match(/storage\.googleapis\.com\/[^/]+\/(.+)/);
-        if (match && match[1]) {
-          rawPath = decodeURIComponent(match[1]);
+    try {
+      let rawPath =
+        (req.params as any)?.path ||
+        (req.query.path as string) ||
+        (req.query.file as string) ||
+        (req.query.name as string) ||
+        '';
+      if (!rawPath && req.query.url) {
+        const urlStr = String(req.query.url);
+        if (urlStr.startsWith('gs://')) {
+          const parts = urlStr.replace('gs://', '').split('/');
+          parts.shift(); // remove bucket name
+          rawPath = parts.join('/');
+        } else if (
+          urlStr.includes('firebasestorage.googleapis.com') ||
+          urlStr.includes('storage.googleapis.com')
+        ) {
+          const match =
+            urlStr.match(/\/o\/([^?]+)/) || urlStr.match(/storage\.googleapis\.com\/[^/]+\/(.+)/);
+          if (match && match[1]) {
+            rawPath = decodeURIComponent(match[1]);
+          }
+        } else if (urlStr.startsWith('http://') || urlStr.startsWith('https://')) {
+          return res.redirect(302, urlStr);
         }
-      } else if (urlStr.startsWith('http://') || urlStr.startsWith('https://')) {
-        return res.redirect(302, urlStr);
       }
-    }
 
-    if (!rawPath) {
-      return res.redirect(302, DEFAULT_FALLBACK_IMAGE);
-    }
-
-    // Handle full external URLs directly
-    if (rawPath.startsWith('http://') || rawPath.startsWith('https://')) {
-      return res.redirect(302, rawPath);
-    }
-
-    let cleanPath = decodeURIComponent(String(rawPath)).replace(/^\/+/, '').replace(/\.\.\//g, '');
-
-    let file = storageBucket.file(cleanPath);
-    let [exists] = await file.exists().catch(() => [false]);
-
-    if (!exists && !cleanPath.startsWith('dishes/')) {
-      const dishFile = storageBucket.file(`dishes/${cleanPath}`);
-      const [dishExists] = await dishFile.exists().catch(() => [false]);
-      if (dishExists) {
-        file = dishFile;
-        exists = true;
-        cleanPath = `dishes/${cleanPath}`;
+      if (!rawPath) {
+        return res.redirect(302, DEFAULT_FALLBACK_IMAGE);
       }
-    }
 
-    if (!exists && !cleanPath.startsWith('images/')) {
-      const imgFile = storageBucket.file(`images/${cleanPath}`);
-      const [imgExists] = await imgFile.exists().catch(() => [false]);
-      if (imgExists) {
-        file = imgFile;
-        exists = true;
-        cleanPath = `images/${cleanPath}`;
+      // Handle full external URLs directly
+      if (rawPath.startsWith('http://') || rawPath.startsWith('https://')) {
+        return res.redirect(302, rawPath);
       }
-    }
 
-    if (!exists) {
-      console.warn(`[Cloud Functions Storage] Image not found: ${cleanPath}. Redirecting to fallback image.`);
-      return res.redirect(302, DEFAULT_FALLBACK_IMAGE);
-    }
+      let cleanPath = decodeURIComponent(String(rawPath))
+        .replace(/^\/+/, '')
+        .replace(/\.\.\//g, '');
 
-    const [metadata]: [any, ...any[]] = await file.getMetadata().catch(() => [{}] as any);
-    const contentType = metadata?.contentType || getMimeTypeFromExt(cleanPath) || 'image/jpeg';
+      let file = storageBucket.file(cleanPath);
+      let [exists] = await file.exists().catch(() => [false]);
 
-    res.setHeader('Content-Type', contentType);
-    res.setHeader('Cache-Control', 'public, max-age=86400, stale-while-revalidate=604800');
-    if (metadata?.size) {
-      res.setHeader('Content-Length', metadata.size);
-    }
-    if (metadata?.etag) {
-      res.setHeader('ETag', metadata.etag);
-    }
+      if (!exists && !cleanPath.startsWith('dishes/')) {
+        const dishFile = storageBucket.file(`dishes/${cleanPath}`);
+        const [dishExists] = await dishFile.exists().catch(() => [false]);
+        if (dishExists) {
+          file = dishFile;
+          exists = true;
+          cleanPath = `dishes/${cleanPath}`;
+        }
+      }
 
-    const readStream = file.createReadStream();
-    readStream.on('error', (err: any) => {
-      console.error('[Cloud Functions Storage Stream Error]:', err);
+      if (!exists && !cleanPath.startsWith('images/')) {
+        const imgFile = storageBucket.file(`images/${cleanPath}`);
+        const [imgExists] = await imgFile.exists().catch(() => [false]);
+        if (imgExists) {
+          file = imgFile;
+          exists = true;
+          cleanPath = `images/${cleanPath}`;
+        }
+      }
+
+      if (!exists) {
+        console.warn(
+          `[Cloud Functions Storage] Image not found: ${cleanPath}. Redirecting to fallback image.`,
+        );
+        return res.redirect(302, DEFAULT_FALLBACK_IMAGE);
+      }
+
+      const [metadata]: [any, ...any[]] = await file.getMetadata().catch(() => [{}] as any);
+      const contentType = metadata?.contentType || getMimeTypeFromExt(cleanPath) || 'image/jpeg';
+
+      res.setHeader('Content-Type', contentType);
+      res.setHeader('Cache-Control', 'public, max-age=86400, stale-while-revalidate=604800');
+      if (metadata?.size) {
+        res.setHeader('Content-Length', metadata.size);
+      }
+      if (metadata?.etag) {
+        res.setHeader('ETag', metadata.etag);
+      }
+
+      const readStream = file.createReadStream();
+      readStream.on('error', (err: any) => {
+        console.error('[Cloud Functions Storage Stream Error]:', err);
+        if (!res.headersSent) {
+          res.redirect(302, DEFAULT_FALLBACK_IMAGE);
+        }
+      });
+
+      readStream.pipe(res);
+    } catch (error: any) {
+      console.error('[Cloud Functions Storage Error]:', error);
       if (!res.headersSent) {
         res.redirect(302, DEFAULT_FALLBACK_IMAGE);
       }
-    });
-
-    readStream.pipe(res);
-  } catch (error: any) {
-    console.error('[Cloud Functions Storage Error]:', error);
-    if (!res.headersSent) {
-      res.redirect(302, DEFAULT_FALLBACK_IMAGE);
     }
-  }
-});
+  },
+);
 
 // 2. Upload Image to Google Cloud Storage
 post('/images/upload', async (req, res) => {
@@ -170,7 +187,10 @@ post('/images/upload', async (req, res) => {
     let targetFilename = filename
       ? filename.replace(/[^a-zA-Z0-9._-]/g, '')
       : `dish-${Date.now()}.${cleanExt}`;
-    targetFilename = targetFilename.replace(/-+\./g, '.').replace(/\.+/g, '.').replace(/^-+|-+$/g, '');
+    targetFilename = targetFilename
+      .replace(/-+\./g, '.')
+      .replace(/\.+/g, '.')
+      .replace(/^-+|-+$/g, '');
     if (!targetFilename.includes('.')) {
       targetFilename = `${targetFilename}.${cleanExt}`;
     }
@@ -180,9 +200,9 @@ post('/images/upload', async (req, res) => {
     await file.save(buffer, {
       metadata: {
         contentType: mime,
-        cacheControl: 'public, max-age=86400, stale-while-revalidate=604800'
+        cacheControl: 'public, max-age=86400, stale-while-revalidate=604800',
       },
-      resumable: false
+      resumable: false,
     });
 
     const publicUrl = `/api/images/${targetPath}`;
@@ -192,7 +212,7 @@ post('/images/upload', async (req, res) => {
       path: targetPath,
       filename: targetFilename,
       size: buffer.length,
-      contentType: mime
+      contentType: mime,
     });
   } catch (error: any) {
     console.error('[Cloud Functions Storage Upload Error]:', error);
@@ -206,7 +226,7 @@ post('/images/upload', async (req, res) => {
 get('/categories', async (_req, res) => {
   try {
     const snapshot = await db.collection('categories').orderBy('orderIndex').get();
-    const categories = snapshot.docs.map(doc => doc.data());
+    const categories = snapshot.docs.map((doc) => doc.data());
     res.json(categories);
   } catch (error) {
     console.error('Error fetching categories:', error);
@@ -219,7 +239,7 @@ get('/menu', async (_req, res) => {
   try {
     const now = new Date();
     const snapshot = await db.collection('menu').orderBy('orderIndex').get();
-    const items = snapshot.docs.map(doc => {
+    const items = snapshot.docs.map((doc) => {
       const data = doc.data();
       return { ...data, _docId: doc.id };
     });
@@ -233,7 +253,9 @@ get('/menu', async (_req, res) => {
           item.soldOutAt = soldOutAt;
           const docId = item._docId || item.id;
           if (docId) {
-            updatePromises.push(db.collection('menu').doc(docId).set({ soldOutAt }, { merge: true }));
+            updatePromises.push(
+              db.collection('menu').doc(docId).set({ soldOutAt }, { merge: true }),
+            );
           }
         } else {
           const soldDate = new Date(item.soldOutAt);
@@ -247,7 +269,12 @@ get('/menu', async (_req, res) => {
               item.soldOutAt = null;
               const docId = item._docId || item.id;
               if (docId) {
-                updatePromises.push(db.collection('menu').doc(docId).set({ available: true, soldOutAt: null }, { merge: true }));
+                updatePromises.push(
+                  db
+                    .collection('menu')
+                    .doc(docId)
+                    .set({ available: true, soldOutAt: null }, { merge: true }),
+                );
               }
             }
           }
@@ -256,7 +283,9 @@ get('/menu', async (_req, res) => {
         item.soldOutAt = null;
         const docId = item._docId || item.id;
         if (docId) {
-          updatePromises.push(db.collection('menu').doc(docId).set({ soldOutAt: null }, { merge: true }));
+          updatePromises.push(
+            db.collection('menu').doc(docId).set({ soldOutAt: null }, { merge: true }),
+          );
         }
       }
       delete item._docId;
@@ -264,7 +293,9 @@ get('/menu', async (_req, res) => {
     });
 
     if (updatePromises.length > 0) {
-      Promise.all(updatePromises).catch(err => console.error('Cloud Functions menu auto-restore write error:', err));
+      Promise.all(updatePromises).catch((err) =>
+        console.error('Cloud Functions menu auto-restore write error:', err),
+      );
     }
 
     res.json(processedItems);
@@ -278,7 +309,7 @@ get('/menu', async (_req, res) => {
 get('/ingredients', async (_req, res) => {
   try {
     const snapshot = await db.collection('ingredients').get();
-    const ingredients = snapshot.docs.map(doc => doc.data());
+    const ingredients = snapshot.docs.map((doc) => doc.data());
     res.json(ingredients);
   } catch (error) {
     console.error('Error fetching ingredients:', error);
@@ -297,7 +328,7 @@ post('/menu', async (req, res) => {
       ...data,
       available: isAvail,
       soldOutAt: !isAvail ? new Date().toISOString() : null,
-      orderIndex: data.orderIndex !== undefined ? data.orderIndex : 999
+      orderIndex: data.orderIndex !== undefined ? data.orderIndex : 999,
     };
     await db.collection('menu').doc(newItem.id).set(newItem);
     res.status(201).json(newItem);
@@ -471,12 +502,12 @@ get('/tables', async (_req, res) => {
     const snapshot = await db.collection('tables').get();
     const nowMs = Date.now();
     const updatePromises: Promise<any>[] = [];
-    const tables = snapshot.docs.map(doc => {
+    const tables = snapshot.docs.map((doc) => {
       const tb = doc.data() as any;
       if (tb.status === 'cleaning') {
         let cleaningStartMs = tb.cleaningStartedAt ? new Date(tb.cleaningStartedAt).getTime() : 0;
         if (!cleaningStartMs || isNaN(cleaningStartMs)) {
-          cleaningStartMs = nowMs - (16 * 60 * 1000);
+          cleaningStartMs = nowMs - 16 * 60 * 1000;
         }
         if (nowMs - cleaningStartMs >= 15 * 60 * 1000) {
           tb.status = 'available';
@@ -488,7 +519,9 @@ get('/tables', async (_req, res) => {
     });
 
     if (updatePromises.length > 0) {
-      Promise.all(updatePromises).catch(err => console.error('[Cloud Functions] Tables auto-clean write error:', err));
+      Promise.all(updatePromises).catch((err) =>
+        console.error('[Cloud Functions] Tables auto-clean write error:', err),
+      );
     }
 
     res.json(tables);
@@ -502,7 +535,7 @@ get('/tables', async (_req, res) => {
 get('/reservations', async (_req, res) => {
   try {
     const snapshot = await db.collection('reservations').get();
-    const reservations = snapshot.docs.map(doc => doc.data());
+    const reservations = snapshot.docs.map((doc) => doc.data());
     res.json(reservations);
   } catch (error) {
     console.error('Error fetching reservations:', error);
@@ -514,7 +547,7 @@ get('/reservations', async (_req, res) => {
 get('/orders', async (_req, res) => {
   try {
     const snapshot = await db.collection('orders').get();
-    const orders = snapshot.docs.map(doc => doc.data());
+    const orders = snapshot.docs.map((doc) => doc.data());
     res.json(orders);
   } catch (error) {
     console.error('Error fetching orders:', error);
@@ -544,7 +577,11 @@ get('/settings/min-spend', async (_req, res) => {
   }
 });
 
-function isStoreOpenFromData(sysData: any, timestamp?: number, isReservation: boolean = false): boolean {
+function isStoreOpenFromData(
+  sysData: any,
+  timestamp?: number,
+  isReservation: boolean = false,
+): boolean {
   if (!sysData) return true;
   if (sysData.liveServicePaused) return false;
 
@@ -552,8 +589,8 @@ function isStoreOpenFromData(sysData: any, timestamp?: number, isReservation: bo
   const operatingHours: any[] = sysData.liveOperatingHours || [];
 
   const date = timestamp ? new Date(timestamp) : new Date();
-  const utc = date.getTime() + (date.getTimezoneOffset() * 60000);
-  const localDate = new Date(utc + (3600000 * 8)); // Taiwan Time (UTC+8)
+  const utc = date.getTime() + date.getTimezoneOffset() * 60000;
+  const localDate = new Date(utc + 3600000 * 8); // Taiwan Time (UTC+8)
 
   const year = localDate.getFullYear();
   const month = String(localDate.getMonth() + 1).padStart(2, '0');
@@ -607,7 +644,7 @@ get('/settings/operating-hours', async (_req, res) => {
     res.json({
       slots: data.liveOperatingHours || [],
       restDays: data.liveRestDays || [],
-      isOpen
+      isOpen,
     });
   } catch (error) {
     res.status(500).send(error);
@@ -641,7 +678,7 @@ get('/settings/members-config', async (_req, res) => {
     const data = systemDoc.data();
     res.json({
       pointsRatio: data?.liveMemberPointsRatio ?? 20,
-      rewards: data?.liveMemberRewards || []
+      rewards: data?.liveMemberRewards || [],
     });
   } catch (error) {
     res.status(500).send(error);
@@ -652,7 +689,14 @@ get('/settings/members-config', async (_req, res) => {
 get('/promo-combo', async (_req, res) => {
   try {
     const systemDoc = await db.collection('settings').doc('system').get();
-    res.json(systemDoc.data()?.livePromoCombo || { enabled: false, requiredQty: 0, discountAmount: 0, eligibleItemIds: [] });
+    res.json(
+      systemDoc.data()?.livePromoCombo || {
+        enabled: false,
+        requiredQty: 0,
+        discountAmount: 0,
+        eligibleItemIds: [],
+      },
+    );
   } catch (error) {
     res.status(500).send(error);
   }
@@ -667,20 +711,20 @@ get('/option-rules', async (_req, res) => {
         id: 'rule-1784360566576',
         name: '加河粉',
         category: '加配料',
-        price: 20
+        price: 20,
       },
       {
         id: 'rule-1784360574891',
         name: '加米線',
         category: '加配料',
-        price: 20
+        price: 20,
       },
       {
         id: 'rule-1784360613823',
         name: '升級套餐(烤蔬菜+泰奶一杯)',
         category: '加配料',
-        price: 140
-      }
+        price: 140,
+      },
     ];
     res.json(systemDoc.data()?.liveOptionRules || defaultRules);
   } catch (error) {
@@ -729,18 +773,27 @@ post('/orders', async (req, res) => {
     const systemDoc = await db.collection('settings').doc('system').get();
     const sysData = systemDoc.data();
     if (!isStoreOpenFromData(sysData)) {
-      return res.status(403).json({ error: '目前不在營業時間內（店鋪休息中），系統不開放下單點餐！' });
+      return res
+        .status(403)
+        .json({ error: '目前不在營業時間內（店鋪休息中），系統不開放下單點餐！' });
     }
 
-    await db.collection('orders').doc(orderId).set({
-      ...orderData,
-      id: orderId,
-      status: orderData.status || 'pending',
-      createdAt: orderData.createdAt || new Date().toISOString(),
-    });
+    await db
+      .collection('orders')
+      .doc(orderId)
+      .set({
+        ...orderData,
+        id: orderId,
+        status: orderData.status || 'pending',
+        createdAt: orderData.createdAt || new Date().toISOString(),
+      });
 
     // Mark table as in_use and clear cleaningStartedAt
-    if (orderData.tableNumber && !String(orderData.tableNumber).includes('外帶') && String(orderData.tableNumber).toLowerCase() !== 'takeout') {
+    if (
+      orderData.tableNumber &&
+      !String(orderData.tableNumber).includes('外帶') &&
+      String(orderData.tableNumber).toLowerCase() !== 'takeout'
+    ) {
       const tblId = String(orderData.tableNumber).trim();
       const tableRef = db.collection('tables').doc(tblId);
       const tableSnap = await tableRef.get();
@@ -830,13 +883,21 @@ put('/orders/:id/checkout', async (req, res) => {
     const orderDoc = await db.collection('orders').doc(id).get();
     const orderData = orderDoc.data();
 
-    await db.collection('orders').doc(id).update({
-      ...checkoutData,
-      isPaid: true,
-      status: 'paid'
-    });
+    await db
+      .collection('orders')
+      .doc(id)
+      .update({
+        ...checkoutData,
+        isPaid: true,
+        status: 'paid',
+      });
 
-    if (orderData && orderData.tableNumber && !String(orderData.tableNumber).includes('外帶') && String(orderData.tableNumber).toLowerCase() !== 'takeout') {
+    if (
+      orderData &&
+      orderData.tableNumber &&
+      !String(orderData.tableNumber).includes('外帶') &&
+      String(orderData.tableNumber).toLowerCase() !== 'takeout'
+    ) {
       const tblId = String(orderData.tableNumber).trim();
       const tableRef = db.collection('tables').doc(tblId);
       const tableSnap = await tableRef.get();
@@ -844,14 +905,17 @@ put('/orders/:id/checkout', async (req, res) => {
         await tableRef.update({
           status: 'cleaning',
           preservedFor: '',
-          cleaningStartedAt: new Date().toISOString()
+          cleaningStartedAt: new Date().toISOString(),
         });
       }
     }
 
     if (orderData && orderData.reservationNo) {
       // Find the reservation by reservationNo (it could be stored as `id` or `reservationNo`)
-      const resQuery = await db.collection('reservations').where('reservationNo', '==', orderData.reservationNo).get();
+      const resQuery = await db
+        .collection('reservations')
+        .where('reservationNo', '==', orderData.reservationNo)
+        .get();
       if (!resQuery.empty) {
         for (const doc of resQuery.docs) {
           await db.collection('reservations').doc(doc.id).delete();
@@ -877,7 +941,7 @@ put('/orders/:id/complete', async (req, res) => {
   const id = req.params.id as string;
   try {
     await db.collection('orders').doc(id).update({
-      status: 'completed'
+      status: 'completed',
     });
     const updated = await db.collection('orders').doc(id).get();
     res.json(updated.data());
@@ -998,7 +1062,10 @@ post('/print-logs/clear', async (_req, res) => {
 post('/settings/service-pause', async (req, res) => {
   const { servicePaused } = req.body;
   try {
-    await db.collection('settings').doc('system').set({ liveServicePaused: !!servicePaused }, { merge: true });
+    await db
+      .collection('settings')
+      .doc('system')
+      .set({ liveServicePaused: !!servicePaused }, { merge: true });
     res.json({ success: true });
   } catch (error) {
     res.status(500).send(error);
@@ -1009,7 +1076,10 @@ post('/settings/service-pause', async (req, res) => {
 post('/settings/min-spend', async (req, res) => {
   const { minSpend } = req.body;
   try {
-    await db.collection('settings').doc('system').set({ liveMinSpendPerPerson: Number(minSpend) }, { merge: true });
+    await db
+      .collection('settings')
+      .doc('system')
+      .set({ liveMinSpendPerPerson: Number(minSpend) }, { merge: true });
     res.json({ success: true, minSpend: Number(minSpend) });
   } catch (error) {
     res.status(500).send(error);
@@ -1020,10 +1090,13 @@ post('/settings/min-spend', async (req, res) => {
 post('/settings/operating-hours', async (req, res) => {
   const { slots, restDays } = req.body;
   try {
-    await db.collection('settings').doc('system').set({
-      liveOperatingHours: slots,
-      liveRestDays: restDays
-    }, { merge: true });
+    await db.collection('settings').doc('system').set(
+      {
+        liveOperatingHours: slots,
+        liveRestDays: restDays,
+      },
+      { merge: true },
+    );
     const systemDoc = await db.collection('settings').doc('system').get();
     const servicePaused = systemDoc.data()?.liveServicePaused || false;
     res.json({ success: true, slots, restDays, isOpen: !servicePaused });
@@ -1036,7 +1109,10 @@ post('/settings/operating-hours', async (req, res) => {
 post('/settings/customer-notice', async (req, res) => {
   const { notice } = req.body;
   try {
-    await db.collection('settings').doc('system').set({ liveCustomerNotice: String(notice) }, { merge: true });
+    await db
+      .collection('settings')
+      .doc('system')
+      .set({ liveCustomerNotice: String(notice) }, { merge: true });
     res.json({ success: true, notice: String(notice) });
   } catch (error) {
     res.status(500).send(error);
@@ -1048,7 +1124,10 @@ post('/settings/popular-item-ids', async (req, res) => {
   const { popularItemIds, ids } = req.body;
   const targetIds = popularItemIds || ids || [];
   try {
-    await db.collection('settings').doc('system').set({ livePopularItemIds: targetIds }, { merge: true });
+    await db
+      .collection('settings')
+      .doc('system')
+      .set({ livePopularItemIds: targetIds }, { merge: true });
     res.json({ success: true, popularItemIds: targetIds });
   } catch (error) {
     res.status(500).send(error);
@@ -1063,16 +1142,19 @@ const handleSavePrinterIp: express.RequestHandler = async (req, res) => {
     const systemRef = db.collection('settings').doc('system');
     const docSnap = await systemRef.get();
     const sysData = docSnap.data() || {};
-    let currentSettings = sysData.livePrinterSettings || {};
+    const currentSettings = sysData.livePrinterSettings || {};
     if (!currentSettings.kitchen) currentSettings.kitchen = {};
     if (!currentSettings.bill) currentSettings.bill = {};
     currentSettings.kitchen.ip = targetIp;
     currentSettings.bill.ip = targetIp;
 
-    await systemRef.set({
-      livePrinterIp: targetIp,
-      livePrinterSettings: currentSettings
-    }, { merge: true });
+    await systemRef.set(
+      {
+        livePrinterIp: targetIp,
+        livePrinterSettings: currentSettings,
+      },
+      { merge: true },
+    );
 
     res.json({ success: true, ip: targetIp });
   } catch (error) {
@@ -1154,7 +1236,10 @@ post('/printer/pin', async (req, res) => {
 post('/promo-combo', async (req, res) => {
   const data = req.body;
   try {
-    await db.collection('settings').doc('system').set({ livePromoCombo: data, livePromoCombos: data.combos }, { merge: true });
+    await db
+      .collection('settings')
+      .doc('system')
+      .set({ livePromoCombo: data, livePromoCombos: data.combos }, { merge: true });
     res.json({ success: true });
   } catch (error) {
     res.status(500).send(error);
@@ -1165,10 +1250,13 @@ post('/promo-combo', async (req, res) => {
 post('/settings/members-config', async (req, res) => {
   const { pointsRatio, rewards } = req.body;
   try {
-    await db.collection('settings').doc('system').set({
-      liveMemberPointsRatio: pointsRatio,
-      liveMemberRewards: rewards
-    }, { merge: true });
+    await db.collection('settings').doc('system').set(
+      {
+        liveMemberPointsRatio: pointsRatio,
+        liveMemberRewards: rewards,
+      },
+      { merge: true },
+    );
     res.json({ success: true });
   } catch (error) {
     res.status(500).send(error);
@@ -1180,14 +1268,17 @@ put('/printer/settings', async (req, res) => {
   const { kitchen, bill } = req.body;
   try {
     const systemDoc = await db.collection('settings').doc('system').get();
-    let currentSettings = systemDoc.data()?.livePrinterSettings || {};
+    const currentSettings = systemDoc.data()?.livePrinterSettings || {};
     if (kitchen) {
       currentSettings.kitchen = { ...currentSettings.kitchen, ...kitchen };
     }
     if (bill) {
       currentSettings.bill = { ...currentSettings.bill, ...bill };
     }
-    await db.collection('settings').doc('system').set({ livePrinterSettings: currentSettings }, { merge: true });
+    await db
+      .collection('settings')
+      .doc('system')
+      .set({ livePrinterSettings: currentSettings }, { merge: true });
     res.json({ success: true });
   } catch (error) {
     res.status(500).send(error);
@@ -1201,11 +1292,11 @@ post('/option-rules', async (req, res) => {
     id: `rule-${Date.now()}`,
     name: name || '新選項',
     category: category || '加配料',
-    price: Number(price) || 0
+    price: Number(price) || 0,
   };
   try {
     const systemDoc = await db.collection('settings').doc('system').get();
-    let rules = systemDoc.data()?.liveOptionRules || [];
+    const rules = systemDoc.data()?.liveOptionRules || [];
     rules.push(newRule);
     await db.collection('settings').doc('system').set({ liveOptionRules: rules }, { merge: true });
     res.status(201).json(newRule);
@@ -1240,7 +1331,10 @@ post('/admin/clear-test-data', async (req, res) => {
     }
 
     // 1. Clear system logs (print logs, inventory logs, promo notifications)
-    await db.collection('settings').doc('logs').set({ printLogs: [], inventoryLogs: [], promoNotifications: [] }, { merge: true });
+    await db
+      .collection('settings')
+      .doc('logs')
+      .set({ printLogs: [], inventoryLogs: [], promoNotifications: [] }, { merge: true });
 
     // 2. Delete all orders
     const ordersSnapshot = await db.collection('orders').get();
@@ -1267,12 +1361,19 @@ post('/admin/clear-test-data', async (req, res) => {
     await batchTables.commit();
 
     // 5. Reset takeout sequence and reset staff pin to default 888888
-    await systemRef.set({ 
-      liveTakeoutSeq: 0, 
-      liveStaffPin: '888888' 
-    }, { merge: true });
+    await systemRef.set(
+      {
+        liveTakeoutSeq: 0,
+        liveStaffPin: '888888',
+      },
+      { merge: true },
+    );
 
-    res.json({ success: true, message: '已成功清除系統內所有測試單據、顧客預約、桌位佔用，並將登入密碼重設為預設值 888888！' });
+    res.json({
+      success: true,
+      message:
+        '已成功清除系統內所有測試單據、顧客預約、桌位佔用，並將登入密碼重設為預設值 888888！',
+    });
   } catch (error) {
     console.error('Error clearing test data:', error);
     res.status(500).send(error);
@@ -1367,7 +1468,7 @@ del('/tables/:id', async (req, res) => {
 // --- Missing Reservations APIs ---
 post('/reservations', async (req, res) => {
   const data = req.body;
-  
+
   if (data.date) {
     const now = new Date();
     now.setMonth(now.getMonth() + 3);
@@ -1380,14 +1481,17 @@ post('/reservations', async (req, res) => {
   const newReservation = {
     id: 'res-' + Math.random().toString(36).substring(2, 11),
     ...data,
-    createdAt: new Date().toISOString()
+    createdAt: new Date().toISOString(),
   };
   try {
     await db.collection('reservations').doc(newReservation.id).set(newReservation);
     // sync table status if pending
     if (newReservation.status === 'pending') {
       const tableRef = db.collection('tables').doc(newReservation.tableNumber);
-      await tableRef.update({ status: 'preserved', preservedFor: `${newReservation.customerName} (${newReservation.time})` });
+      await tableRef.update({
+        status: 'preserved',
+        preservedFor: `${newReservation.customerName} (${newReservation.time})`,
+      });
     }
     res.status(201).json(newReservation);
   } catch (error) {
@@ -1404,7 +1508,10 @@ put('/reservations/:id', async (req, res) => {
       const doc = await db.collection('reservations').doc(id).get();
       const resData = doc.data();
       if (resData && resData.tableNumber) {
-        await db.collection('tables').doc(resData.tableNumber).update({ status: 'available', preservedFor: '' });
+        await db
+          .collection('tables')
+          .doc(resData.tableNumber)
+          .update({ status: 'available', preservedFor: '' });
       }
       // Delete the reservation to invalidate the exclusive channel
       await db.collection('reservations').doc(id).delete();
@@ -1423,7 +1530,10 @@ put('/reservations/:id', async (req, res) => {
         if (updates.status === 'seated') {
           await tableRef.update({ status: 'in_use', preservedFor: '' });
         } else if (updates.status === 'pending') {
-           await tableRef.update({ status: 'preserved', preservedFor: `${resData.customerName} (${resData.time})` });
+          await tableRef.update({
+            status: 'preserved',
+            preservedFor: `${resData.customerName} (${resData.time})`,
+          });
         }
       }
     }
@@ -1479,7 +1589,13 @@ put('/orders/:id/pay', async (req, res) => {
 
     await db.collection('orders').doc(id).update({ isPaid });
 
-    if (isPaid && orderData && orderData.tableNumber && !String(orderData.tableNumber).includes('外帶') && String(orderData.tableNumber).toLowerCase() !== 'takeout') {
+    if (
+      isPaid &&
+      orderData &&
+      orderData.tableNumber &&
+      !String(orderData.tableNumber).includes('外帶') &&
+      String(orderData.tableNumber).toLowerCase() !== 'takeout'
+    ) {
       const tblId = String(orderData.tableNumber).trim();
       const tableRef = db.collection('tables').doc(tblId);
       const tableSnap = await tableRef.get();
@@ -1487,7 +1603,7 @@ put('/orders/:id/pay', async (req, res) => {
         await tableRef.update({
           status: 'cleaning',
           preservedFor: '',
-          cleaningStartedAt: new Date().toISOString()
+          cleaningStartedAt: new Date().toISOString(),
         });
       }
     }
@@ -1514,19 +1630,25 @@ put('/orders/:id/items/:itemId/complete', async (req, res) => {
   const { isCompleted } = req.body;
   try {
     // Requires reading the whole order to update the specific item
-    const orderDoc = await db.collection('orders').doc(id as string).get();
+    const orderDoc = await db
+      .collection('orders')
+      .doc(id as string)
+      .get();
     const order = orderDoc.data();
     if (order && order.items) {
-      const items = order.items.map((it: any) => it.id === itemId ? { ...it, isCompleted } : it);
+      const items = order.items.map((it: any) => (it.id === itemId ? { ...it, isCompleted } : it));
       const allCompleted = items.every((it: any) => it.isCompleted);
       let status = order.status;
       // Don't auto-complete paid orders — kitchen must explicitly press 出餐完成
       if (allCompleted && status !== 'paid') {
-         status = 'completed';
+        status = 'completed';
       } else if (status === 'completed') {
-         status = 'preparing';
+        status = 'preparing';
       }
-      await db.collection('orders').doc(id as string).update({ items, status });
+      await db
+        .collection('orders')
+        .doc(id as string)
+        .update({ items, status });
     }
     res.json({ success: true });
   } catch (error) {
@@ -1542,13 +1664,16 @@ post('/send-promo-push', async (req, res) => {
     title: data.title || '沙貝限時優惠 🇹🇭',
     message: data.message || '老闆瘋了！即刻點餐全單享特別折扣！',
     badge: data.badge || 'PROMO',
-    isRead: false
+    isRead: false,
   };
   try {
     const logsDoc = await db.collection('settings').doc('logs').get();
-    let notifs = logsDoc.data()?.promoNotifications || [];
+    const notifs = logsDoc.data()?.promoNotifications || [];
     notifs.push(newNotif);
-    await db.collection('settings').doc('logs').set({ promoNotifications: notifs }, { merge: true });
+    await db
+      .collection('settings')
+      .doc('logs')
+      .set({ promoNotifications: notifs }, { merge: true });
     res.status(201).json(newNotif);
   } catch (error) {
     res.status(500).send(error);
@@ -1569,7 +1694,10 @@ post('/takeout/scan', async (_req, res) => {
     seq++;
     const assigned = `外帶 #${seq}`;
 
-    await db.collection('settings').doc('system').set({ liveTakeoutSeq: seq, lastTakeoutDate: lastDate }, { merge: true });
+    await db
+      .collection('settings')
+      .doc('system')
+      .set({ liveTakeoutSeq: seq, lastTakeoutDate: lastDate }, { merge: true });
     res.json({ success: true, tableNumber: assigned, sequence: seq });
   } catch (error) {
     res.status(500).send(error);
@@ -1581,7 +1709,7 @@ get('/takeout/status', async (_req, res) => {
     const systemDoc = await db.collection('settings').doc('system').get();
     res.json({
       sequence: systemDoc.data()?.liveTakeoutSeq || 0,
-      lastResetDate: systemDoc.data()?.lastTakeoutDate || ''
+      lastResetDate: systemDoc.data()?.lastTakeoutDate || '',
     });
   } catch (error) {
     res.status(500).send(error);
@@ -1590,7 +1718,11 @@ get('/takeout/status', async (_req, res) => {
 
 // --- Additional Printer Endpoints ---
 
-async function sendToNetworkPrinter(host: string, port: number = 9100, data: string): Promise<{ success: boolean; log: string }> {
+async function sendToNetworkPrinter(
+  host: string,
+  port: number = 9100,
+  data: string,
+): Promise<{ success: boolean; log: string }> {
   return new Promise((resolve) => {
     const socket = new net.Socket();
     let isSettled = false;
@@ -1609,7 +1741,10 @@ async function sendToNetworkPrinter(host: string, port: number = 9100, data: str
         if (err) {
           resolve({ success: false, log: `發送失敗: ${err.message}` });
         } else {
-          resolve({ success: true, log: `成功發送 ${data.length} 位元組至熱感印表機 ${host}:${port}` });
+          resolve({
+            success: true,
+            log: `成功發送 ${data.length} 位元組至熱感印表機 ${host}:${port}`,
+          });
         }
       });
     });
@@ -1646,7 +1781,9 @@ post('/printer/test', async (req, res) => {
     const systemDoc = await db.collection('settings').doc('system').get();
     const sysData = systemDoc.data() || {};
     const livePrinterIp = sysData.livePrinterIp || '192.168.123.100';
-    const livePrinterSettings = sysData.livePrinterSettings || { bill: { cashDrawerEnabled: false } };
+    const livePrinterSettings = sysData.livePrinterSettings || {
+      bill: { cashDrawerEnabled: false },
+    };
 
     let drawerNote = '';
     if ((target === 'bill' || target === 'all') && livePrinterSettings.bill?.cashDrawerEnabled) {
@@ -1655,7 +1792,12 @@ post('/printer/test', async (req, res) => {
       drawerNote = `\n----------------------------------------\n現金收銀抽屜連動: 未啟用 ❌\n`;
     }
 
-    const targetLabel = target === 'kitchen' ? '廚房 KDS 工作票印表機' : target === 'bill' ? '前台帳單與收銀明細印表機' : '全機型 (雙機測試)';
+    const targetLabel =
+      target === 'kitchen'
+        ? '廚房 KDS 工作票印表機'
+        : target === 'bill'
+          ? '前台帳單與收銀明細印表機'
+          : '全機型 (雙機測試)';
     const testTicket = `
 ========================================
        沙貝燒烤 (${targetLabel} 測試頁)
@@ -1680,13 +1822,13 @@ post('/printer/test', async (req, res) => {
     }
 
     const logsDoc = await db.collection('settings').doc('logs').get();
-    let printLogs = logsDoc.data()?.printLogs || [];
+    const printLogs = logsDoc.data()?.printLogs || [];
     printLogs.push({
       id: `pr-${Date.now()}-test`,
       timestamp: new Date().toLocaleTimeString(),
       content: `${testTicket}\n\n[TCP 印表機傳送日誌]: ${tcpResult.log}`,
       orderId: 'TEST-PAGE',
-      type: target === 'bill' ? 'customer' : 'kitchen'
+      type: target === 'bill' ? 'customer' : 'kitchen',
     });
     await db.collection('settings').doc('logs').set({ printLogs }, { merge: true });
 
@@ -1695,7 +1837,7 @@ post('/printer/test', async (req, res) => {
       message: `測試頁 (${targetLabel}) 已處理傳送`,
       ticketContent: testTicket,
       ip: livePrinterSettings.kitchen?.ip || livePrinterIp,
-      tcpLog: tcpResult.log
+      tcpLog: tcpResult.log,
     });
   } catch (error) {
     console.error('Error printing test page:', error);
@@ -1717,7 +1859,9 @@ post('/printer/open-drawer', async (_req, res) => {
     let drawerBuffer: string;
     try {
       const cleanHex = rawCmdHex.replace(/[^0-9A-Fa-f]/g, '');
-      drawerBuffer = cleanHex ? Buffer.from(cleanHex, 'hex').toString('binary') : '\x1b\x70\x00\x19\xfa';
+      drawerBuffer = cleanHex
+        ? Buffer.from(cleanHex, 'hex').toString('binary')
+        : '\x1b\x70\x00\x19\xfa';
     } catch {
       drawerBuffer = '\x1b\x70\x00\x19\xfa';
     }
@@ -1726,19 +1870,19 @@ post('/printer/open-drawer', async (_req, res) => {
     const tcpResult = await sendToNetworkPrinter(printerIp, port, drawerBuffer);
 
     const logsDoc = await db.collection('settings').doc('logs').get();
-    let printLogs = logsDoc.data()?.printLogs || [];
+    const printLogs = logsDoc.data()?.printLogs || [];
     printLogs.push({
       id: `pr-${Date.now()}-manual-drawer`,
       timestamp: new Date().toLocaleTimeString(),
       content: `========================================\n         SABAY BBQ 手動開啟收銀抽屜\n========================================\n觸發方式: 櫃檯員工手動點擊觸發\n實體埠口: ${settings.usbPort || 'USB002'} / IP: ${printerIp}:${port}\n執行日誌:\n${tcpResult.log}\n========================================`,
       orderId: 'MANUAL-TRIGGER',
-      type: 'customer'
+      type: 'customer',
     });
     await db.collection('settings').doc('logs').set({ printLogs }, { merge: true });
 
     res.json({
       success: tcpResult.success,
-      log: tcpResult.log
+      log: tcpResult.log,
     });
   } catch (error: any) {
     console.error('Error opening drawer:', error);
@@ -1751,7 +1895,10 @@ get('/printer/ping', async (req, res) => {
   const systemDoc = await db.collection('settings').doc('system').get();
   const sysData = systemDoc.data() || {};
   const ip = (req.query.ip as string) || sysData.livePrinterIp || '192.168.123.100';
-  const isMock = req.query.simulate === 'true' || ip.toLowerCase().includes('mock') || ip.toLowerCase().includes('simulate');
+  const isMock =
+    req.query.simulate === 'true' ||
+    ip.toLowerCase().includes('mock') ||
+    ip.toLowerCase().includes('simulate');
 
   if (isMock) {
     return res.json({
@@ -1759,7 +1906,7 @@ get('/printer/ping', async (req, res) => {
       ip,
       port: 9100,
       simulated: true,
-      timestamp: new Date().toISOString()
+      timestamp: new Date().toISOString(),
     });
   }
 
@@ -1784,7 +1931,7 @@ get('/printer/ping', async (req, res) => {
         ip,
         port: 9100,
         simulated: false,
-        timestamp: new Date().toISOString()
+        timestamp: new Date().toISOString(),
       });
     }
   });
@@ -1799,7 +1946,7 @@ get('/printer/ping', async (req, res) => {
         port: 9100,
         simulated: true,
         error: err.message,
-        timestamp: new Date().toISOString()
+        timestamp: new Date().toISOString(),
       });
     }
   });
@@ -1814,7 +1961,7 @@ get('/printer/ping', async (req, res) => {
         port: 9100,
         simulated: true,
         error: 'Network connection timeout (ETIMEDOUT)',
-        timestamp: new Date().toISOString()
+        timestamp: new Date().toISOString(),
       });
     }
   });
@@ -1841,7 +1988,7 @@ get('/printer/settings', async (_req, res) => {
         headerPrefix: '★★★ 廚房工作備餐單 ★★★',
         footerSuffix: '請主廚盡速配餐出餐！',
         printTelephone: '0966626408',
-        printTimeEnabled: true
+        printTimeEnabled: true,
       },
       bill: {
         enabled: true,
@@ -1862,8 +2009,8 @@ get('/printer/settings', async (_req, res) => {
         headerPrefix: '★★★ 顧客結帳明細單 ★★★',
         footerSuffix: '謝謝光臨，歡迎再度光臨！',
         printTelephone: '0966626408',
-        printTimeEnabled: true
-      }
+        printTimeEnabled: true,
+      },
     };
     res.json(sysData.livePrinterSettings || defaultSettings);
   } catch (error) {
@@ -1876,14 +2023,17 @@ post('/printer/settings', async (req, res) => {
   const { kitchen, bill } = req.body;
   try {
     const systemDoc = await db.collection('settings').doc('system').get();
-    let currentSettings = systemDoc.data()?.livePrinterSettings || {};
+    const currentSettings = systemDoc.data()?.livePrinterSettings || {};
     if (kitchen) {
       currentSettings.kitchen = { ...currentSettings.kitchen, ...kitchen };
     }
     if (bill) {
       currentSettings.bill = { ...currentSettings.bill, ...bill };
     }
-    await db.collection('settings').doc('system').set({ livePrinterSettings: currentSettings }, { merge: true });
+    await db
+      .collection('settings')
+      .doc('system')
+      .set({ livePrinterSettings: currentSettings }, { merge: true });
     res.json({ success: true });
   } catch (error) {
     res.status(500).send(error);
@@ -1896,4 +2046,3 @@ app.use((req, res) => {
 });
 
 export const api = functions.https.onRequest(app);
-
