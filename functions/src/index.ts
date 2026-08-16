@@ -1,7 +1,12 @@
-import * as functions from 'firebase-functions';
+import { onRequest } from 'firebase-functions/v2/https';
+import { setGlobalOptions } from 'firebase-functions/v2';
 import * as admin from 'firebase-admin';
-import * as express from 'express';
-import * as cors from 'cors';
+import { getStorage } from 'firebase-admin/storage';
+import express from 'express';
+
+setGlobalOptions({ maxInstances: 10, minInstances: 1, memory: "1GiB", region: "asia-east1", concurrency: 80 });
+import cors from 'cors';
+import compression from 'compression';
 import * as net from 'net';
 import * as path from 'path';
 import { getFirestore } from 'firebase-admin/firestore';
@@ -11,9 +16,10 @@ admin.initializeApp();
 
 // Connect to the specific named Firestore database
 const db = getFirestore('ai-studio-sabaythaibbqtabl-84418196-9d0c-459c-bced-ddc424dfba07');
-const storageBucket = admin.storage().bucket('sabay-bbq-order.firebasestorage.app');
+const storageBucket = getStorage().bucket('sabay-bbq-order.firebasestorage.app');
 const app = express();
 
+app.use(compression() as unknown as express.RequestHandler);
 app.use(cors({ origin: true }));
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ limit: '10mb', extended: true }));
@@ -200,6 +206,11 @@ post('/images/upload', async (req, res) => {
   }
 });
 
+// In-Memory Caching for High-Read Endpoints
+let cachedMenu: { data: any; timestamp: number } | null = null;
+let cachedCategories: { data: any; timestamp: number } | null = null;
+const CACHE_TTL_MS = 60 * 1000; // 60 seconds
+
 // --- GET APIs ---
 
 // 0. Consolidated Bootstrap endpoint for fast initial load
@@ -228,16 +239,10 @@ get('/bootstrap', async (_req, res) => {
       return { ...data, _docId: doc.id };
     });
 
-    const updatePromises: Promise<any>[] = [];
     const processedItems = items.map((item: any) => {
       if (item.available === false) {
         if (!item.soldOutAt) {
-          const soldOutAt = now.toISOString();
-          item.soldOutAt = soldOutAt;
-          const docId = item._docId || item.id;
-          if (docId) {
-            updatePromises.push(db.collection('menu').doc(docId).set({ soldOutAt }, { merge: true }));
-          }
+          item.soldOutAt = now.toISOString();
         } else {
           const soldDate = new Date(item.soldOutAt);
           if (!isNaN(soldDate.getTime())) {
@@ -247,27 +252,15 @@ get('/bootstrap', async (_req, res) => {
             if (now.getTime() >= restoreTime.getTime()) {
               item.available = true;
               item.soldOutAt = null;
-              const docId = item._docId || item.id;
-              if (docId) {
-                updatePromises.push(db.collection('menu').doc(docId).set({ available: true, soldOutAt: null }, { merge: true }));
-              }
             }
           }
         }
       } else if (item.soldOutAt) {
         item.soldOutAt = null;
-        const docId = item._docId || item.id;
-        if (docId) {
-          updatePromises.push(db.collection('menu').doc(docId).set({ soldOutAt: null }, { merge: true }));
-        }
       }
       delete item._docId;
       return item;
     });
-
-    if (updatePromises.length > 0) {
-      Promise.all(updatePromises).catch(err => console.error('Cloud Functions bootstrap menu auto-restore write error:', err));
-    }
 
     const nowMs = Date.now();
     const tableUpdatePromises: Promise<any>[] = [];
@@ -326,8 +319,16 @@ get('/bootstrap', async (_req, res) => {
 get('/categories', async (_req, res) => {
   try {
     res.setHeader('Cache-Control', 'public, max-age=15, s-maxage=60, stale-while-revalidate=300');
+    
+    const nowMs = Date.now();
+    if (cachedCategories && (nowMs - cachedCategories.timestamp < CACHE_TTL_MS)) {
+      return res.json(cachedCategories.data);
+    }
+
     const snapshot = await db.collection('categories').orderBy('orderIndex').get();
     const categories = snapshot.docs.map(doc => doc.data());
+    
+    cachedCategories = { data: categories, timestamp: nowMs };
     res.json(categories);
   } catch (error) {
     console.error('Error fetching categories:', error);
@@ -339,24 +340,23 @@ get('/categories', async (_req, res) => {
 get('/menu', async (_req, res) => {
   try {
     res.setHeader('Cache-Control', 'public, max-age=15, s-maxage=60, stale-while-revalidate=300');
+    
+    const nowMs = Date.now();
+    if (cachedMenu && (nowMs - cachedMenu.timestamp < CACHE_TTL_MS)) {
+      return res.json(cachedMenu.data);
+    }
+
     const now = new Date();
-    const snapshot = await db.collection('menu').orderBy('orderIndex').get();
+    const snapshot = await db.collection('menu').select('id', 'category', 'name', 'price', 'image', 'description', 'available', 'isAvailable', 'isSetMeal', 'requiredSaucesOption', 'hasNoodlesOption', 'hasCoconutsMilkOption', 'containsBeef', 'containsPork', 'containsSeafood', 'isNotSpicy', 'customAddOns', 'recipe', 'orderIndex', 'isTakeoutAvailable', 'soldOutAt').orderBy('orderIndex').get();
     const items = snapshot.docs.map(doc => {
       const data = doc.data();
       return { ...data, _docId: doc.id };
     });
 
-    const updatePromises: Promise<any>[] = [];
-
     const processedItems = items.map((item: any) => {
       if (item.available === false) {
         if (!item.soldOutAt) {
-          const soldOutAt = now.toISOString();
-          item.soldOutAt = soldOutAt;
-          const docId = item._docId || item.id;
-          if (docId) {
-            updatePromises.push(db.collection('menu').doc(docId).set({ soldOutAt }, { merge: true }));
-          }
+          item.soldOutAt = now.toISOString();
         } else {
           const soldDate = new Date(item.soldOutAt);
           if (!isNaN(soldDate.getTime())) {
@@ -367,28 +367,17 @@ get('/menu', async (_req, res) => {
             if (now.getTime() >= restoreTime.getTime()) {
               item.available = true;
               item.soldOutAt = null;
-              const docId = item._docId || item.id;
-              if (docId) {
-                updatePromises.push(db.collection('menu').doc(docId).set({ available: true, soldOutAt: null }, { merge: true }));
-              }
             }
           }
         }
       } else if (item.soldOutAt) {
         item.soldOutAt = null;
-        const docId = item._docId || item.id;
-        if (docId) {
-          updatePromises.push(db.collection('menu').doc(docId).set({ soldOutAt: null }, { merge: true }));
-        }
       }
       delete item._docId;
       return item;
     });
 
-    if (updatePromises.length > 0) {
-      Promise.all(updatePromises).catch(err => console.error('Cloud Functions menu auto-restore write error:', err));
-    }
-
+    cachedMenu = { data: processedItems, timestamp: nowMs };
     res.json(processedItems);
   } catch (error) {
     console.error('Error fetching menu:', error);
@@ -635,7 +624,10 @@ get('/reservations', async (_req, res) => {
 // 6. Get Orders
 get('/orders', async (_req, res) => {
   try {
-    const snapshot = await db.collection('orders').get();
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const startOfDay = today.toISOString();
+    const snapshot = await db.collection('orders').where('createdAt', '>=', startOfDay).orderBy('createdAt', 'desc').get();
     const orders = snapshot.docs.map(doc => doc.data());
     res.json(orders);
   } catch (error) {
@@ -646,11 +638,22 @@ get('/orders', async (_req, res) => {
 
 // --- System & settings GET APIs ---
 
+let cachedServicePause: { data: any; timestamp: number } | null = null;
+
 // 7. Service Pause Settings
 get('/settings/service-pause', async (_req, res) => {
   try {
+    res.setHeader('Cache-Control', 'public, max-age=60, s-maxage=300, stale-while-revalidate=600');
+    
+    const nowMs = Date.now();
+    if (cachedServicePause && (nowMs - cachedServicePause.timestamp < CACHE_TTL_MS)) {
+      return res.json(cachedServicePause.data);
+    }
+    
     const systemDoc = await db.collection('settings').doc('system').get();
-    res.json({ servicePaused: systemDoc.data()?.liveServicePaused || false });
+    const data = { servicePaused: systemDoc.data()?.liveServicePaused || false };
+    cachedServicePause = { data, timestamp: nowMs };
+    res.json(data);
   } catch (error) {
     res.status(500).send(error);
   }
@@ -884,8 +887,7 @@ put('/orders/:id/status', async (req, res) => {
   const { status } = req.body;
   try {
     await db.collection('orders').doc(id).update({ status });
-    const updated = await db.collection('orders').doc(id).get();
-    res.json(updated.data());
+    res.json({ id, status });
   } catch (error) {
     res.status(500).send(error);
   }
@@ -897,8 +899,7 @@ put('/orders/:id/table-number', async (req, res) => {
   const { tableNumber } = req.body;
   try {
     await db.collection('orders').doc(id).update({ tableNumber });
-    const updated = await db.collection('orders').doc(id).get();
-    res.json(updated.data());
+    res.json({ id, tableNumber });
   } catch (error) {
     res.status(500).send(error);
   }
@@ -910,8 +911,7 @@ put('/orders/:id/quick-notes', async (req, res) => {
   const { quickNotes } = req.body;
   try {
     await db.collection('orders').doc(id).update({ quickNotes });
-    const updated = await db.collection('orders').doc(id).get();
-    res.json(updated.data());
+    res.json({ id, quickNotes });
   } catch (error) {
     res.status(500).send(error);
   }
@@ -923,8 +923,7 @@ put('/orders/:id/flag', async (req, res) => {
   const { isFlagged, flagReason } = req.body;
   try {
     await db.collection('orders').doc(id).update({ isFlagged, flagReason });
-    const updated = await db.collection('orders').doc(id).get();
-    res.json(updated.data());
+    res.json({ id, isFlagged, flagReason });
   } catch (error) {
     res.status(500).send(error);
   }
@@ -936,8 +935,7 @@ put('/orders/:id/items', async (req, res) => {
   const { items, refundLogs } = req.body;
   try {
     await db.collection('orders').doc(id).update({ items, refundLogs });
-    const updated = await db.collection('orders').doc(id).get();
-    res.json(updated.data());
+    res.json({ id, items, refundLogs });
   } catch (error) {
     res.status(500).send(error);
   }
@@ -987,8 +985,7 @@ put('/orders/:id/checkout', async (req, res) => {
       }
     }
 
-    const updated = await db.collection('orders').doc(id).get();
-    res.json(updated.data());
+    res.json({ id, ...checkoutData, isPaid: true, status: 'paid' });
   } catch (error) {
     res.status(500).send(error);
   }
@@ -1001,8 +998,7 @@ put('/orders/:id/complete', async (req, res) => {
     await db.collection('orders').doc(id).update({
       status: 'completed'
     });
-    const updated = await db.collection('orders').doc(id).get();
-    res.json(updated.data());
+    res.json({ id, status: 'completed' });
   } catch (error) {
     res.status(500).send(error);
   }
@@ -2013,9 +2009,9 @@ post('/printer/settings', async (req, res) => {
 });
 
 // Catch-all 404 JSON Handler to prevent returning HTML on missing API endpoints
-app.use((req, res) => {
+app.use((req: any, res: any) => {
   res.status(404).json({ error: `無效的 API 請求: ${req.method} ${req.path}` });
 });
 
-export const api = functions.https.onRequest(app);
+export const api = onRequest(app);
 

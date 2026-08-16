@@ -1,14 +1,15 @@
 import 'dotenv/config';
 import express from 'express';
 import path from 'path';
-import fs from 'fs';
 import net from 'net';
 import { Storage } from '@google-cloud/storage';
 import { initializeApp as initializeClientApp, getApps as getClientApps } from 'firebase/app';
 import { getFirestore as getClientFirestore, collection, doc, deleteDoc, getDoc, getDocs, setDoc, writeBatch } from 'firebase/firestore';
 import { createServer as createViteServer } from 'vite';
 import { Order, Ingredient, MenuItem, OrderItem, Category, TableConfig, OperatingHourSlot, Reservation, Language } from './src/types';
-import { INITIAL_MENU, INITIAL_INGREDIENTS, INITIAL_CATEGORIES, INGREDIENT_RECIPE_MAP } from './src/data';
+import fs from 'fs';
+const dataJson = JSON.parse(fs.readFileSync('./public/data.json', 'utf-8'));
+const { INITIAL_MENU, INITIAL_INGREDIENTS, INITIAL_CATEGORIES, INGREDIENT_RECIPE_MAP } = dataJson;
 import { GoogleGenAI, Type } from '@google/genai';
 import {
   triggerRealCashDrawer,
@@ -16,19 +17,9 @@ import {
   printCustomerReceipt
 } from './hardware/printerDriver';
 
-const STORAGE_BUCKET_NAME = 'sabay-bbq-order.firebasestorage.app';
-let gcsStorage: Storage | null = null;
-let gcsBucket: any = null;
-
-try {
-  gcsStorage = new Storage({
-    projectId: 'sabay-bbq-order'
-  });
-  gcsBucket = gcsStorage.bucket(STORAGE_BUCKET_NAME);
-  console.log(`[Sabay Storage] Initialized @google-cloud/storage bucket: ${STORAGE_BUCKET_NAME}`);
-} catch (err: any) {
-  console.warn('[Sabay Storage] @google-cloud/storage initialization note:', err?.message);
-}
+import { initFirebaseStorage, gcsBucket, getGeminiClient, app, PORT } from './src/server/init';
+import { setupMiddleware } from './src/server/middleware';
+initFirebaseStorage();
 
 function getMimeTypeFromExt(filePath: string): string {
   const ext = path.extname(filePath).toLowerCase();
@@ -51,20 +42,6 @@ function getMimeTypeFromExt(filePath: string): string {
     default:
       return 'image/jpeg';
   }
-}
-
-function getGeminiClient(): GoogleGenAI | null {
-  if (!process.env.GEMINI_API_KEY) {
-    return null;
-  }
-  return new GoogleGenAI({
-    apiKey: process.env.GEMINI_API_KEY,
-    httpOptions: {
-      headers: {
-        'User-Agent': 'aistudio-build',
-      }
-    }
-  });
 }
 
 function getSabayAuthenticImage(nameZh: string, defaultImg: string): string {
@@ -132,23 +109,7 @@ function getSabayAuthenticImage(nameZh: string, defaultImg: string): string {
   return defaultImg;
 }
 
-const app = express();
-const PORT = 3000;
-
-app.use(express.json({ limit: '10mb' }));
-app.use(express.urlencoded({ limit: '10mb', extended: true }));
-
-// Enable CORS for cross-origin local PC bridge requests from Firebase Hosting
-app.use((req, res, next) => {
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
-  if (req.method === 'OPTIONS') {
-    return res.sendStatus(200);
-  }
-  next();
-});
-
+setupMiddleware(app);
 // In-Memory Database State
 let liveMenu: MenuItem[] = INITIAL_MENU.map((item, index) => {
   const id = item.id;
@@ -440,12 +401,7 @@ let liveOptionRules: any[] = [
             "category": "加配料"
           }
         ];
-let livePromoCombo = {
-  "discountAmount": 0,
-  "requiredQty": 0,
-  "enabled": false,
-  "eligibleItemIds": []
-};
+let livePromoCombo = { enabled: false, requiredQty: 10, discountAmount: 20, eligibleItemIds: [] };
 let livePromoCombos: any[] = [];
 let livePrinterSettings = {
   "bill": {
@@ -732,12 +688,7 @@ let printLogs: { id: string; timestamp: string; content: string; orderId: string
 // In-Memory Push Promo Dispatch Queue
 let promoNotifications: { id: string; timestamp: string; title: string; message: string; badge: string; isRead: boolean }[] = [];
 
-let livePopularItemIds = [
-          "dish-2605122152569",
-          "dish-2696007842576",
-          "dish-1909192003211",
-          "dish-2207122058577"
-        ];
+let livePopularItemIds: string[] = [];
 
 let liveMemberPointsRatio = 20; // default points ratio: 每20元新增1點
 let liveMemberRewards = [
@@ -1400,23 +1351,6 @@ app.post('/api/print-logs/clear', (_req, res) => {
   res.json({ success: true, message: '虛擬出單記錄已全部清除' });
 });
 
-// Clear all testing historical orders and transient data
-app.post('/api/admin/clear-test-data', (req, res) => {
-  const { pin } = req.body;
-  if (!pin || pin !== liveStaffPin) {
-    return res.status(403).json({ error: '安全校對碼 (員工解鎖 PIN 碼) 不正確，無法授權清空！' });
-  }
-  
-  // Clear data
-  liveOrders = [];
-  inventoryLogs = [];
-  printLogs = [];
-  promoNotifications = [];
-  liveTakeoutSeq = 0;
-  
-  saveStateToDisk();
-  res.json({ success: true, message: '已成功清除系統內所有測試用歷史單據、庫存記錄及虛擬出單日誌！' });
-});
 
 // Get promotional push notification list
 app.get('/api/push-notifications', (_req, res) => {
@@ -1637,106 +1571,6 @@ app.post('/api/printer/print-receipt', async (req, res) => {
   });
 });
 
-// Generate and trigger real physical test print receipt
-app.post('/api/printer/test', async (req, res) => {
-  const target = (req.body?.target as 'kitchen' | 'bill' | 'all') || 'all';
-
-  let drawerNote = '';
-  let drawerResLog = '';
-  if ((target === 'bill' || target === 'all') && livePrinterSettings.bill.cashDrawerEnabled) {
-    const drawerRes = await triggerCashDrawerOpen(livePrinterSettings.bill);
-    drawerResLog = drawerRes.log;
-    drawerNote = `
-----------------------------------------
-現金收銀抽屜連動: 啟用 🟢
-觸發驅動: ${livePrinterSettings.bill.cashDrawerDriver}
-實體埠口: ${livePrinterSettings.bill.usbPort || 'LPT1:'}
-執行日誌:
-${drawerRes.log}
-`;
-    
-    printLogs.push({
-      id: `pr-${Date.now()}-drawer-test`,
-      timestamp: new Date().toLocaleTimeString(),
-      content: `========================================\n         SABAY BBQ 收銀箱測試開啟\n========================================\n觸發方式: 測試列印連動觸發\n實體埠口: ${livePrinterSettings.bill.usbPort || 'LPT1:'}\n執行日誌:\n${drawerRes.log}\n========================================`,
-      orderId: 'TEST-PAGE',
-      type: 'customer'
-    });
-  } else if (livePrinterSettings.bill.cashDrawerEnabled) {
-    drawerNote = `
-----------------------------------------
-現金收銀抽屜連動: 啟用 🟢
-`;
-  } else {
-    drawerNote = `
-----------------------------------------
-現金收銀抽屜連動: 未啟用 ❌
-`;
-  }
-
-  const targetLabel = target === 'kitchen' ? '廚房 KDS 工作票印表機' : target === 'bill' ? '前台帳單與收銀明細印表機' : '全機型 (雙機測試)';
-  const testTicket = `
-========================================
-       沙貝燒烤 (${targetLabel} 測試頁)
-========================================
-測試狀態: 連線成功 🟢
-主機來源: ${req.ip || '127.0.0.1'}
-廚房印表機 IP: ${livePrinterSettings.kitchen?.ip || livePrinterIp} (${livePrinterSettings.kitchen?.connectionType || 'IP'})
-前台印表機 Port: ${livePrinterSettings.bill?.usbPort || 'LPT1:'} (${livePrinterSettings.bill?.connectionType || 'LPT'})
-列印時間: ${new Date().toLocaleString()}
-----------------------------------------
-字型測試 / Font Test:
-1. 繁體中文 🇹🇼 - 測試正常 (沙貝沙貝)
-2. English 🇺🇸 - OK (Sawatdee!)
-3. 泰文 🇹🇭 - ลาบหมูย่างส้มตำ${drawerNote}
-========================================
-  `.trim();
-
-  let kitchenHardwareRes = { success: false, log: '未測試廚房印表機' };
-  let billHardwareRes = { success: false, log: '未測試前台印表機' };
-
-  if (target === 'kitchen' || target === 'all') {
-    kitchenHardwareRes = await printKitchenTicket(testTicket, {
-      ip: livePrinterSettings.kitchen?.ip || livePrinterIp,
-      port: (livePrinterSettings.kitchen as any)?.port || 9100,
-      connectionType: (livePrinterSettings.kitchen?.connectionType as 'IP' | 'USB' | 'LPT') || 'IP',
-      usbPort: livePrinterSettings.kitchen?.usbPort || 'USB001'
-    });
-  }
-
-  if (target === 'bill' || target === 'all') {
-    billHardwareRes = await printCustomerReceipt(testTicket, {
-      ip: livePrinterSettings.bill?.ip || livePrinterIp,
-      port: (livePrinterSettings.bill as any)?.port || 9100,
-      connectionType: (livePrinterSettings.bill?.connectionType as 'IP' | 'USB' | 'LPT') || 'LPT',
-      usbPort: livePrinterSettings.bill?.usbPort || 'LPT1:',
-      cashDrawerEnabled: false
-    });
-  }
-
-  const isSuccess = target === 'kitchen' ? kitchenHardwareRes.success : target === 'bill' ? billHardwareRes.success : (kitchenHardwareRes.success || billHardwareRes.success);
-
-  printLogs.push({
-    id: `pr-${Date.now()}-test`,
-    timestamp: new Date().toLocaleTimeString(),
-    content: `${testTicket}\n\n[實體廚房印表機 (${livePrinterSettings.kitchen?.width || '80mm'})]:\n${kitchenHardwareRes.log}\n\n[實體前台印表機 (${livePrinterSettings.bill?.width || '58mm'})]:\n${billHardwareRes.log}`,
-    orderId: 'TEST-PAGE',
-    type: target === 'bill' ? 'customer' : 'kitchen'
-  });
-
-  saveStateToDisk();
-  res.json({
-    success: isSuccess,
-    message: `測試頁已傳送至實體印表機 [${targetLabel}]`,
-    hardwareLogs: {
-      kitchen: kitchenHardwareRes.log,
-      bill: billHardwareRes.log,
-      drawer: drawerResLog
-    },
-    ticketContent: testTicket,
-    target
-  });
-});
 
 
 // Update printer/staff authentication PIN (used from Manager dashboard)
@@ -1927,7 +1761,7 @@ app.get('/api/bootstrap', (_req, res) => {
   syncTableStatusesWithTodayReservations();
   res.setHeader('Cache-Control', 'public, max-age=15, s-maxage=60, stale-while-revalidate=300');
   res.json({
-    menu: liveMenu,
+    menu: liveMenu.map(m => ({ id: m.id, category: m.category, name: m.name, price: m.price, image: m.image, description: m.description, available: m.available, isSetMeal: m.isSetMeal, requiredSaucesOption: m.requiredSaucesOption, hasNoodlesOption: m.hasNoodlesOption, hasCoconutsMilkOption: m.hasCoconutsMilkOption, containsBeef: m.containsBeef, containsPork: m.containsPork, containsSeafood: m.containsSeafood, isNotSpicy: m.isNotSpicy, customAddOns: m.customAddOns, orderIndex: m.orderIndex, isTakeoutAvailable: m.isTakeoutAvailable, soldOutAt: m.soldOutAt })),
     categories: liveCategories,
     tables: liveTables,
     operatingHours: {
@@ -1955,7 +1789,7 @@ app.get('/api/bootstrap', (_req, res) => {
 app.get('/api/menu', (_req, res) => {
   checkAndRestoreSoldOutMenuItems();
   res.setHeader('Cache-Control', 'public, max-age=15, s-maxage=60, stale-while-revalidate=300');
-  res.json(liveMenu);
+  res.json(liveMenu.map(m => ({ id: m.id, category: m.category, name: m.name, price: m.price, image: m.image, description: m.description, available: m.available, isSetMeal: m.isSetMeal, requiredSaucesOption: m.requiredSaucesOption, hasNoodlesOption: m.hasNoodlesOption, hasCoconutsMilkOption: m.hasCoconutsMilkOption, containsBeef: m.containsBeef, containsPork: m.containsPork, containsSeafood: m.containsSeafood, isNotSpicy: m.isNotSpicy, customAddOns: m.customAddOns, orderIndex: m.orderIndex, isTakeoutAvailable: m.isTakeoutAvailable, soldOutAt: m.soldOutAt })));
 });
 
 // Create live menu item
@@ -2021,7 +1855,7 @@ app.put('/api/menu/reorder', (req, res) => {
   });
   liveMenu = reordered;
   saveStateToDisk();
-  res.json({ success: true, menu: liveMenu });
+  res.json({ success: true, menu: liveMenu.map(m => ({ id: m.id, category: m.category, name: m.name, price: m.price, image: m.image, description: m.description, available: m.available, isSetMeal: m.isSetMeal, requiredSaucesOption: m.requiredSaucesOption, hasNoodlesOption: m.hasNoodlesOption, hasCoconutsMilkOption: m.hasCoconutsMilkOption, containsBeef: m.containsBeef, containsPork: m.containsPork, containsSeafood: m.containsSeafood, isNotSpicy: m.isNotSpicy, customAddOns: m.customAddOns, orderIndex: m.orderIndex, isTakeoutAvailable: m.isTakeoutAvailable, soldOutAt: m.soldOutAt })) });
 });
 
 // Update live menu item
@@ -2972,7 +2806,7 @@ app.get('/api/orders/history-check', (req, res) => {
 });
 
 app.get('/api/orders', (_req, res) => {
-  res.json(liveOrders);
+  res.json(liveOrders.map(o => ({ id: o.id, tableNumber: o.tableNumber, items: o.items.map(i => ({ id: i.id, menuItemId: i.menuItemId, name: i.name, price: i.price, qty: i.qty, customization: i.customization, isPrepared: i.isPrepared, isCompleted: i.isCompleted })), subtotal: o.subtotal, serviceCharge: o.serviceCharge, total: o.total, status: o.status, createdAt: o.createdAt, customerName: o.customerName, paymentMethod: o.paymentMethod, isPaid: o.isPaid, guestCount: o.guestCount, quickNotes: o.quickNotes, isFlagged: o.isFlagged, flagReason: o.flagReason })));
 });
 
 function getMappedTableId(inputTableId: string, availableTables: Array<{id: string}>): string {

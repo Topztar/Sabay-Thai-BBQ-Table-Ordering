@@ -4,7 +4,7 @@ import { getOfflineQueue, addRequestToQueue, clearOfflineQueue, removeOrderReque
 import { safeStorage } from './lib/safeStorage';
 import { apiFetch } from './lib/api';
 import { db, isFirebaseSyncEnabled } from './lib/firebase';
-import { collection, onSnapshot, query, orderBy } from 'firebase/firestore';
+import { collection, onSnapshot, query, orderBy, limit, where } from 'firebase/firestore';
 import { TRANSLATIONS, INITIAL_MENU, INITIAL_CATEGORIES } from './data';
 import { LanguageSelector } from './components/LanguageSelector';
 import { ChefHat, Smartphone, BarChart3, UtensilsCrossed, LogOut, Lock, Phone, MapPin, Eye, EyeOff, Coins, Monitor } from 'lucide-react';
@@ -34,6 +34,7 @@ interface AnalyticsData {
 }
 
 export default function App() {
+  const [dataLoaded, setDataLoaded] = useState(false);
   const [lang, setLang] = useState<Language>(() => {
     try {
       const stored = safeStorage.getItem('sabay-language');
@@ -419,20 +420,33 @@ export default function App() {
         }
       };
 
-      if (isFullCycle) {
-        const [bootstrapRes, ordersRes, notifRes, printLogsRes, analyticsRes] = await Promise.all([
-          safeFetch('/api/bootstrap', null),
-          safeFetch('/api/orders', []),
-          safeFetch('/api/push-notifications', []),
-          safeFetch('/api/print-logs', []),
-          safeFetch('/api/analytics', fallbackAnalytics)
-        ]);
+      const isCustomerView = activeTab === 'customer';
 
-        const bootstrapData = await safeJson(bootstrapRes, null);
-        const ordData = await safeJson(ordersRes, []);
-        const notifData = await safeJson(notifRes, []);
-        const printData = await safeJson(printLogsRes, []);
-        const alyData = await safeJson(analyticsRes, fallbackAnalytics);
+      if (isFullCycle) {
+        const fetchPromises: Promise<Response>[] = [
+          safeFetch('/api/bootstrap', null),
+          safeFetch('/api/orders', [])
+        ];
+
+        if (!isCustomerView) {
+          fetchPromises.push(
+            safeFetch('/api/push-notifications', []),
+            safeFetch('/api/print-logs', [])
+          );
+        }
+
+        const results = await Promise.all(fetchPromises);
+        const bootstrapData = await safeJson(results[0], null);
+        const ordData = await safeJson(results[1], []);
+
+        let notifData = [];
+        let printData = [];
+        let alyData = fallbackAnalytics;
+
+        if (!isCustomerView) {
+          notifData = await safeJson(results[2], []);
+          printData = await safeJson(results[3], []);
+        }
 
         setOrders(reconcileOrdersWithRecentTransitions(ordData));
         setPrintLogs(printData);
@@ -467,19 +481,27 @@ export default function App() {
         }
       } else {
         // Lightweight polling cycle for active dynamic state
-        const [ordersRes, tablesRes, servicePauseRes, notifRes, ingRes] = await Promise.all([
+        const fetchPromises: Promise<Response>[] = [
           safeFetch('/api/orders', []),
           safeFetch('/api/tables', []),
           safeFetch('/api/settings/service-pause', { servicePaused: false }),
-          safeFetch('/api/push-notifications', []),
           safeFetch('/api/ingredients', [])
-        ]);
+        ];
 
-        const ordData = await safeJson(ordersRes, []);
-        const tablesData = await safeJson(tablesRes, []);
-        const servicePauseData = await safeJson(servicePauseRes, { servicePaused: false });
-        const notifData = await safeJson(notifRes, []);
-        const ingData = await safeJson(ingRes, []);
+        if (!isCustomerView) {
+          fetchPromises.push(safeFetch('/api/push-notifications', []));
+        }
+
+        const results = await Promise.all(fetchPromises);
+        const ordData = await safeJson(results[0], []);
+        const tablesData = await safeJson(results[1], []);
+        const servicePauseData = await safeJson(results[2], { servicePaused: false });
+        const ingData = await safeJson(results[3], []);
+
+        let notifData = [];
+        if (!isCustomerView) {
+          notifData = await safeJson(results[4], []);
+        }
 
         setOrders(reconcileOrdersWithRecentTransitions(ordData));
         if (Array.isArray(tablesData)) setTables(tablesData);
@@ -517,8 +539,11 @@ export default function App() {
 
     if (isFirebaseSyncEnabled()) {
       try {
-        // 實時監聽訂單
-        const ordersQuery = query(collection(db, "orders"), orderBy("createdAt", "desc"));
+        // 實時監聽訂單 (只載入今日訂單以降低 Firestore 讀取費用)
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        const startOfDay = today.toISOString();
+        const ordersQuery = query(collection(db, "orders"), where("createdAt", ">=", startOfDay), orderBy("createdAt", "desc"));
         unsubscribeOrders = onSnapshot(ordersQuery, (snapshot) => {
           const updatedOrders = snapshot.docs.map(doc => ({ ...doc.data() } as Order));
           setOrders(reconcileOrdersWithRecentTransitions(updatedOrders));
@@ -536,19 +561,23 @@ export default function App() {
       } catch (e) {
         console.warn('[Firebase Sync] Realtime listener initialization skipped:', e);
       }
+      console.log('✅ [Firebase Sync] Firebase 實時同步已啟用，停止高頻 5 秒 HTTP 輪詢。');
     } else {
       console.log('⛔ [Firebase Sync] Firebase 同步已停止，轉用本地 API 定時自動輪詢。');
     }
 
-    // 當 Firebase 同步停止時，使用 5 秒自動輪詢維護本地資料同步
-    const localPollingTimer = setInterval(() => {
-      fetchData(false);
-    }, 5000);
+    let localPollingTimer: ReturnType<typeof setInterval>;
+    if (!isFirebaseSyncEnabled()) {
+      // 當 Firebase 同步停止時，才使用 5 秒自動輪詢維護本地資料同步
+      localPollingTimer = setInterval(() => {
+        fetchData(false);
+      }, 5000);
+    }
 
     return () => {
       unsubscribeOrders();
       unsubscribeIngredients();
-      clearInterval(localPollingTimer);
+      if (localPollingTimer) clearInterval(localPollingTimer);
     };
   }, []);
 

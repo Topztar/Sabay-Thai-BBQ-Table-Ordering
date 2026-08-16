@@ -43,8 +43,8 @@ try {
 export const db = firestoreInstance;
 export const auth = getAuth();
 
-// Default state: Firebase sync is disabled per user request ("停止與Firebase同步")
-let syncEnabled = false;
+// Default state: Firebase sync is now re-enabled for performance and cost reduction
+let syncEnabled = true;
 
 export const isFirebaseSyncEnabled = () => syncEnabled;
 
@@ -68,8 +68,7 @@ export const startFirebaseSync = async () => {
   }
 };
 
-// Immediately stop Firebase network sync on module boot
-stopFirebaseSync();
+// Firebase network sync is enabled by default
 
 export const functions = getFunctions(app);
 

@@ -1,0 +1,44 @@
+name: CI
+
+on:
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install Dependencies
+        run: npm ci
+
+      - name: Run ESLint
+        run: npx eslint src/
+
+      - name: Typecheck
+        run: npm run lint
+
+      - name: Run Depcheck
+        run: npx depcheck
+
+      - name: Build Application
+        run: npm run build
+
+      - name: Check bundle size
+        run: |
+          size=$(stat -c%s "dist/server.cjs")
+          if [ $size -gt 250000 ]; then
+            echo "Error: Server bundle size exceeds 250KB limit"
+            false
+          else
+            echo "Server bundle size is OK"
+          fi
